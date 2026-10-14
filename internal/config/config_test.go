@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,6 +37,12 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.NATSServerURL != "" || cfg.NATSCredsPath != "" || cfg.NATSEnabled() {
 		t.Fatalf("nats url %q creds %q enabled %t", cfg.NATSServerURL, cfg.NATSCredsPath, cfg.NATSEnabled())
+	}
+	if cfg.LogLevel != "info" || cfg.TLSEnabled {
+		t.Fatalf("log %q tls %t", cfg.LogLevel, cfg.TLSEnabled)
+	}
+	if cfg.TLSCert != "" || cfg.TLSKey != "" || cfg.TLSCA != "" || cfg.NATSCAFile != "" {
+		t.Fatalf("cert %q key %q ca %q nats ca %q", cfg.TLSCert, cfg.TLSKey, cfg.TLSCA, cfg.NATSCAFile)
 	}
 	if cfg.MicroserviceName != "" || cfg.NodeUID != "" || cfg.ApplicationName != "" {
 		t.Fatalf("labels %q %q %q", cfg.MicroserviceName, cfg.NodeUID, cfg.ApplicationName)
@@ -496,6 +503,428 @@ func TestLoadNATS(t *testing.T) {
 	})
 }
 
+// TestLoadSecurityPrecedence checks that the file overrides defaults and the environment overrides the file.
+func TestLoadSecurityPrecedence(t *testing.T) {
+	cert := writeFileMode(t, "cert", 0o600)
+	key := writeFileMode(t, "key", 0o600)
+	ca := writeFileMode(t, "ca", 0o600)
+	natsCA := filepath.Join(t.TempDir(), "nats-ca.pem")
+
+	t.Run("file overrides default", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		body := fmt.Sprintf("logLevel: debug\ntlsEnabled: true\ntlsCert: %q\ntlsKey: %q\ntlsCA: %q\nnatsCAFile: %q\n", cert, key, ca, natsCA)
+		t.Setenv("CONFIG_PATH", writeConfig(t, body))
+
+		cfg := mustLoad(t)
+		if cfg.LogLevel != "debug" || !cfg.TLSEnabled {
+			t.Fatalf("log %q tls %t", cfg.LogLevel, cfg.TLSEnabled)
+		}
+		if cfg.TLSCert != cert || cfg.TLSKey != key || cfg.TLSCA != ca || cfg.NATSCAFile != natsCA {
+			t.Fatalf("cert %q key %q ca %q nats ca %q", cfg.TLSCert, cfg.TLSKey, cfg.TLSCA, cfg.NATSCAFile)
+		}
+		if cfg.HTTPPort != 8000 || cfg.ModelsPath != "/models" || cfg.QueueCapacity != 8 {
+			t.Fatalf("port %d path %q queue %d", cfg.HTTPPort, cfg.ModelsPath, cfg.QueueCapacity)
+		}
+	})
+
+	t.Run("env overrides file", func(t *testing.T) {
+		envCert := writeFileMode(t, "env-cert", 0o600)
+		envKey := writeFileMode(t, "env-key", 0o600)
+		envCA := writeFileMode(t, "env-ca", 0o600)
+		envNATS := filepath.Join(t.TempDir(), "env-nats-ca.pem")
+		blocked := writeFileMode(t, "blocked", 0o000)
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		body := fmt.Sprintf("logLevel: trace\ntlsEnabled: true\ntlsCert: %q\ntlsKey: %q\ntlsCA: %q\nnatsCAFile: /from-file\nmodelsPath: /from-file\n", blocked, blocked, blocked)
+		t.Setenv("CONFIG_PATH", writeConfig(t, body))
+		t.Setenv("LOG_LEVEL", "debug")
+		t.Setenv("TLS_ENABLED", "true")
+		t.Setenv("TLS_CERT", envCert)
+		t.Setenv("TLS_KEY", envKey)
+		t.Setenv("TLS_CA", envCA)
+		t.Setenv("NATS_CA_FILE", envNATS)
+
+		cfg := mustLoad(t)
+		if cfg.LogLevel != "debug" || !cfg.TLSEnabled {
+			t.Fatalf("log %q tls %t", cfg.LogLevel, cfg.TLSEnabled)
+		}
+		if cfg.TLSCert != envCert || cfg.TLSKey != envKey || cfg.TLSCA != envCA || cfg.NATSCAFile != envNATS {
+			t.Fatalf("cert %q key %q ca %q nats ca %q", cfg.TLSCert, cfg.TLSKey, cfg.TLSCA, cfg.NATSCAFile)
+		}
+		if cfg.ModelsPath != "/from-file" || cfg.HTTPPort != 8000 {
+			t.Fatalf("path %q port %d", cfg.ModelsPath, cfg.HTTPPort)
+		}
+	})
+}
+
+// TestLoadLogLevel checks accepted levels and that an empty value stays unset.
+func TestLoadLogLevel(t *testing.T) {
+	t.Run("empty env keeps file", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", writeConfig(t, "logLevel: debug\n"))
+		t.Setenv("LOG_LEVEL", "")
+		if cfg := mustLoad(t); cfg.LogLevel != "debug" {
+			t.Fatalf("log %q", cfg.LogLevel)
+		}
+	})
+
+	t.Run("blank env keeps file", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", writeConfig(t, "logLevel: debug\n"))
+		t.Setenv("LOG_LEVEL", " \t ")
+		if cfg := mustLoad(t); cfg.LogLevel != "debug" {
+			t.Fatalf("log %q", cfg.LogLevel)
+		}
+	})
+
+	t.Run("both empty are info", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", writeConfig(t, "logLevel: \"\"\n"))
+		t.Setenv("LOG_LEVEL", "")
+		if cfg := mustLoad(t); cfg.LogLevel != "info" {
+			t.Fatalf("log %q", cfg.LogLevel)
+		}
+	})
+
+	t.Run("blank file is info", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", writeConfig(t, "logLevel: \"   \"\n"))
+		if cfg := mustLoad(t); cfg.LogLevel != "info" {
+			t.Fatalf("log %q", cfg.LogLevel)
+		}
+	})
+
+	t.Run("WARN", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", filepath.Join(t.TempDir(), "missing.yaml"))
+		t.Setenv("LOG_LEVEL", "WARN")
+		if cfg := mustLoad(t); cfg.LogLevel != "warn" {
+			t.Fatalf("log %q", cfg.LogLevel)
+		}
+	})
+
+	t.Run("debug", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", writeConfig(t, "logLevel: DEBUG\n"))
+		if cfg := mustLoad(t); cfg.LogLevel != "debug" {
+			t.Fatalf("log %q", cfg.LogLevel)
+		}
+	})
+
+	t.Run("trace", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", filepath.Join(t.TempDir(), "missing.yaml"))
+		t.Setenv("LOG_LEVEL", "trace")
+		mustFail(t)
+	})
+
+	t.Run("trace in file", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", writeConfig(t, "logLevel: trace\n"))
+		mustFail(t)
+	})
+
+	t.Run("other", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", filepath.Join(t.TempDir(), "missing.yaml"))
+		t.Setenv("LOG_LEVEL", "verbose")
+		mustFail(t)
+	})
+}
+
+// TestLoadTLSEnabled checks the accepted flag values and the ones that are rejected.
+func TestLoadTLSEnabled(t *testing.T) {
+	cert := writeFileMode(t, "cert", 0o600)
+	key := writeFileMode(t, "key", 0o600)
+
+	t.Run("true", func(t *testing.T) {
+		isolateEnv(t)
+		prepareTLS(t, cert, key, "")
+		t.Setenv("TLS_ENABLED", "true")
+		if cfg := mustLoad(t); !cfg.TLSEnabled {
+			t.Fatal("tls disabled")
+		}
+	})
+
+	t.Run("TRUE", func(t *testing.T) {
+		isolateEnv(t)
+		prepareTLS(t, cert, key, "")
+		t.Setenv("TLS_ENABLED", "TRUE")
+		cfg := mustLoad(t)
+		if !cfg.TLSEnabled || cfg.TLSCert != cert || cfg.TLSKey != key || cfg.TLSCA != "" {
+			t.Fatalf("tls %t cert %q key %q ca %q", cfg.TLSEnabled, cfg.TLSCert, cfg.TLSKey, cfg.TLSCA)
+		}
+	})
+
+	t.Run("false", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", writeConfig(t, "tlsEnabled: true\n"))
+		t.Setenv("TLS_ENABLED", "false")
+		t.Setenv("TLS_CERT", filepath.Join(t.TempDir(), "missing-cert"))
+		if cfg := mustLoad(t); cfg.TLSEnabled {
+			t.Fatal("tls enabled")
+		}
+	})
+
+	t.Run("False", func(t *testing.T) {
+		blocked := writeFileMode(t, "blocked", 0o000)
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		body := fmt.Sprintf("tlsEnabled: TRUE\ntlsCert: %q\ntlsKey: %q\ntlsCA: %q\n", blocked, blocked, blocked)
+		t.Setenv("CONFIG_PATH", writeConfig(t, body))
+		t.Setenv("TLS_ENABLED", "False")
+		cfg := mustLoad(t)
+		if cfg.TLSEnabled || cfg.TLSCert != blocked || cfg.TLSKey != blocked || cfg.TLSCA != blocked {
+			t.Fatalf("tls %t cert %q key %q ca %q", cfg.TLSEnabled, cfg.TLSCert, cfg.TLSKey, cfg.TLSCA)
+		}
+	})
+
+	for _, value := range []string{"yes", "1", "", "   "} {
+		name := value
+		if value == "" {
+			name = "empty"
+		} else if strings.TrimSpace(value) == "" {
+			name = "blank"
+		}
+		t.Run(name, func(t *testing.T) {
+			isolateEnv(t)
+			t.Setenv("AUTH_MODE", AuthDisabled)
+			t.Setenv("CONFIG_PATH", writeConfig(t, "tlsEnabled: false\n"))
+			t.Setenv("TLS_ENABLED", value)
+			mustFail(t)
+		})
+	}
+}
+
+// TestLoadTLSFiles checks the certificate pair and that TLS off does not open those paths.
+func TestLoadTLSFiles(t *testing.T) {
+	t.Run("pair and ca", func(t *testing.T) {
+		cert := writeFileMode(t, "cert", 0o600)
+		key := writeFileMode(t, "key", 0o600)
+		ca := writeFileMode(t, "ca", 0o600)
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		body := fmt.Sprintf("tlsEnabled: TRUE\ntlsCert: %q\ntlsKey: %q\ntlsCA: %q\n", cert, key, ca)
+		t.Setenv("CONFIG_PATH", writeConfig(t, body))
+		cfg := mustLoad(t)
+		if !cfg.TLSEnabled || cfg.TLSCert != cert || cfg.TLSKey != key || cfg.TLSCA != ca {
+			t.Fatalf("tls %t cert %q key %q ca %q", cfg.TLSEnabled, cfg.TLSCert, cfg.TLSKey, cfg.TLSCA)
+		}
+	})
+
+	t.Run("empty ca is unset", func(t *testing.T) {
+		cert := writeFileMode(t, "cert", 0o600)
+		key := writeFileMode(t, "key", 0o600)
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		body := fmt.Sprintf("tlsEnabled: true\ntlsCert: %q\ntlsKey: %q\ntlsCA: \"   \"\n", cert, key)
+		t.Setenv("CONFIG_PATH", writeConfig(t, body))
+		cfg := mustLoad(t)
+		if !cfg.TLSEnabled || cfg.TLSCA != "" {
+			t.Fatalf("tls %t ca %q", cfg.TLSEnabled, cfg.TLSCA)
+		}
+	})
+
+	t.Run("empty ca env clears file", func(t *testing.T) {
+		cert := writeFileMode(t, "cert", 0o600)
+		key := writeFileMode(t, "key", 0o600)
+		ca := writeFileMode(t, "ca", 0o600)
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		body := fmt.Sprintf("tlsEnabled: true\ntlsCert: %q\ntlsKey: %q\ntlsCA: %q\n", cert, key, ca)
+		t.Setenv("CONFIG_PATH", writeConfig(t, body))
+		t.Setenv("TLS_CA", "")
+		cfg := mustLoad(t)
+		if !cfg.TLSEnabled || cfg.TLSCA != "" || cfg.TLSCert != cert {
+			t.Fatalf("tls %t cert %q ca %q", cfg.TLSEnabled, cfg.TLSCert, cfg.TLSCA)
+		}
+	})
+
+	t.Run("only certificate", func(t *testing.T) {
+		isolateEnv(t)
+		prepareTLS(t, writeFileMode(t, "cert", 0o600), "", "")
+		t.Setenv("TLS_ENABLED", "true")
+		mustFail(t)
+	})
+
+	t.Run("only key", func(t *testing.T) {
+		isolateEnv(t)
+		prepareTLS(t, "", writeFileMode(t, "key", 0o600), "")
+		t.Setenv("TLS_ENABLED", "true")
+		mustFail(t)
+	})
+
+	t.Run("neither path", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", writeConfig(t, "tlsEnabled: true\n"))
+		mustFail(t)
+	})
+
+	t.Run("unreadable certificate", func(t *testing.T) {
+		isolateEnv(t)
+		prepareTLS(t, writeFileMode(t, "cert", 0o000), writeFileMode(t, "key", 0o600), "")
+		t.Setenv("TLS_ENABLED", "true")
+		mustFail(t)
+	})
+
+	t.Run("unreadable key", func(t *testing.T) {
+		isolateEnv(t)
+		prepareTLS(t, writeFileMode(t, "cert", 0o600), writeFileMode(t, "key", 0o000), "")
+		t.Setenv("TLS_ENABLED", "true")
+		mustFail(t)
+	})
+
+	t.Run("missing certificate", func(t *testing.T) {
+		isolateEnv(t)
+		prepareTLS(t, filepath.Join(t.TempDir(), "missing-cert"), writeFileMode(t, "key", 0o600), "")
+		t.Setenv("TLS_ENABLED", "true")
+		mustFail(t)
+	})
+
+	t.Run("unreadable ca", func(t *testing.T) {
+		isolateEnv(t)
+		prepareTLS(t, writeFileMode(t, "cert", 0o600), writeFileMode(t, "key", 0o600), writeFileMode(t, "ca", 0o000))
+		t.Setenv("TLS_ENABLED", "true")
+		mustFail(t)
+	})
+
+	t.Run("missing ca", func(t *testing.T) {
+		isolateEnv(t)
+		prepareTLS(t, writeFileMode(t, "cert", 0o600), writeFileMode(t, "key", 0o600), filepath.Join(t.TempDir(), "missing-ca"))
+		t.Setenv("TLS_ENABLED", "true")
+		mustFail(t)
+	})
+
+	t.Run("disabled leaves missing paths", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "missing")
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		body := fmt.Sprintf("tlsEnabled: FALSE\ntlsCert: %q\ntlsKey: %q\ntlsCA: %q\n", missing, missing+"-key", missing+"-ca")
+		t.Setenv("CONFIG_PATH", writeConfig(t, body))
+		cfg := mustLoad(t)
+		if cfg.TLSEnabled || cfg.TLSCert != missing || cfg.TLSKey != missing+"-key" || cfg.TLSCA != missing+"-ca" {
+			t.Fatalf("tls %t cert %q key %q ca %q", cfg.TLSEnabled, cfg.TLSCert, cfg.TLSKey, cfg.TLSCA)
+		}
+	})
+
+	t.Run("disabled leaves unreadable paths", func(t *testing.T) {
+		blocked := writeFileMode(t, "blocked", 0o000)
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", filepath.Join(t.TempDir(), "missing.yaml"))
+		t.Setenv("TLS_CERT", blocked)
+		t.Setenv("TLS_KEY", blocked)
+		t.Setenv("TLS_CA", blocked)
+		cfg := mustLoad(t)
+		if cfg.TLSEnabled || cfg.TLSCert != blocked || cfg.TLSKey != blocked || cfg.TLSCA != blocked {
+			t.Fatalf("tls %t cert %q key %q ca %q", cfg.TLSEnabled, cfg.TLSCert, cfg.TLSKey, cfg.TLSCA)
+		}
+	})
+
+	t.Run("default leaves one unreadable path", func(t *testing.T) {
+		blocked := writeFileMode(t, "blocked", 0o000)
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", filepath.Join(t.TempDir(), "missing.yaml"))
+		t.Setenv("TLS_KEY", blocked)
+		cfg := mustLoad(t)
+		if cfg.TLSEnabled || cfg.LogLevel != "info" || cfg.TLSKey != blocked || cfg.TLSCert != "" || cfg.TLSCA != "" {
+			t.Fatalf("tls %t log %q key %q", cfg.TLSEnabled, cfg.LogLevel, cfg.TLSKey)
+		}
+	})
+}
+
+// TestLoadNATSCAFile checks that the CA path is stored and is not opened.
+func TestLoadNATSCAFile(t *testing.T) {
+	t.Run("missing path is stored", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "no-such-ca.pem")
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", filepath.Join(t.TempDir(), "missing.yaml"))
+		t.Setenv("NATS_CA_FILE", missing)
+		cfg := mustLoad(t)
+		if cfg.NATSCAFile != missing || cfg.NATSEnabled() {
+			t.Fatalf("ca %q enabled %t", cfg.NATSCAFile, cfg.NATSEnabled())
+		}
+	})
+
+	t.Run("unreadable path is stored", func(t *testing.T) {
+		blocked := writeFileMode(t, "ca", 0o000)
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", writeConfig(t, fmt.Sprintf("natsCAFile: %q\n", blocked)))
+		if cfg := mustLoad(t); cfg.NATSCAFile != blocked {
+			t.Fatalf("ca %q", cfg.NATSCAFile)
+		}
+	})
+
+	t.Run("empty env keeps file", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", writeConfig(t, "natsCAFile: /from-file\n"))
+		t.Setenv("NATS_CA_FILE", "")
+		if cfg := mustLoad(t); cfg.NATSCAFile != "/from-file" {
+			t.Fatalf("ca %q", cfg.NATSCAFile)
+		}
+	})
+
+	t.Run("blank env keeps file", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", writeConfig(t, "natsCAFile: /from-file\n"))
+		t.Setenv("NATS_CA_FILE", "  ")
+		if cfg := mustLoad(t); cfg.NATSCAFile != "/from-file" {
+			t.Fatalf("ca %q", cfg.NATSCAFile)
+		}
+	})
+
+	t.Run("both empty are unset", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", writeConfig(t, "natsCAFile: \"\"\n"))
+		t.Setenv("NATS_CA_FILE", "")
+		if cfg := mustLoad(t); cfg.NATSCAFile != "" {
+			t.Fatalf("ca %q", cfg.NATSCAFile)
+		}
+	})
+
+	t.Run("blank file is unset", func(t *testing.T) {
+		isolateEnv(t)
+		t.Setenv("AUTH_MODE", AuthDisabled)
+		t.Setenv("CONFIG_PATH", writeConfig(t, "natsCAFile: \"   \"\n"))
+		if cfg := mustLoad(t); cfg.NATSCAFile != "" {
+			t.Fatalf("ca %q", cfg.NATSCAFile)
+		}
+	})
+}
+
+// TestLoadIgnoresFlags checks that process arguments are not a settings source.
+func TestLoadIgnoresFlags(t *testing.T) {
+	isolateEnv(t)
+	t.Setenv("AUTH_MODE", AuthDisabled)
+	t.Setenv("CONFIG_PATH", filepath.Join(t.TempDir(), "missing.yaml"))
+	args := os.Args
+	os.Args = []string{"inference", "-logLevel", "trace", "-tlsEnabled=true"}
+	t.Cleanup(func() { os.Args = args })
+
+	cfg := mustLoad(t)
+	if cfg.LogLevel != "info" || cfg.TLSEnabled || cfg.HTTPPort != 8000 {
+		t.Fatalf("log %q tls %t port %d", cfg.LogLevel, cfg.TLSEnabled, cfg.HTTPPort)
+	}
+}
+
 // TestLoadEdgeletLabels checks that the platform label variables are stored when set.
 func TestLoadEdgeletLabels(t *testing.T) {
 	isolateEnv(t)
@@ -524,6 +953,12 @@ func isolateEnv(t *testing.T) {
 		"AUTH_STATIC_TOKEN",
 		"NATS_SERVER_URL",
 		"NATS_CREDS_PATH",
+		"NATS_CA_FILE",
+		"TLS_ENABLED",
+		"TLS_CERT",
+		"TLS_KEY",
+		"TLS_CA",
+		"LOG_LEVEL",
 		"INTRA_OP_THREADS",
 		"INTER_OP_THREADS",
 		"MAX_PAYLOAD_BYTES",
@@ -544,6 +979,21 @@ func isolateEnv(t *testing.T) {
 	}
 }
 
+func prepareTLS(t *testing.T, cert, key, ca string) {
+	t.Helper()
+	t.Setenv("AUTH_MODE", AuthDisabled)
+	t.Setenv("CONFIG_PATH", filepath.Join(t.TempDir(), "missing.yaml"))
+	if cert != "" {
+		t.Setenv("TLS_CERT", cert)
+	}
+	if key != "" {
+		t.Setenv("TLS_KEY", key)
+	}
+	if ca != "" {
+		t.Setenv("TLS_CA", ca)
+	}
+}
+
 func prepareServerID(t *testing.T, body string) {
 	t.Helper()
 	t.Setenv("AUTH_MODE", AuthDisabled)
@@ -552,6 +1002,23 @@ func prepareServerID(t *testing.T, body string) {
 		return
 	}
 	t.Setenv("CONFIG_PATH", writeConfig(t, body))
+}
+
+func writeFileMode(t *testing.T, name string, mode os.FileMode) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+	if err := os.Chmod(path, mode); err != nil {
+		t.Fatalf("chmod %s: %v", name, err)
+	}
+	if mode&0o400 == 0 {
+		t.Cleanup(func() {
+			_ = os.Chmod(path, 0o600)
+		})
+	}
+	return path
 }
 
 func writeConfig(t *testing.T, body string) string {

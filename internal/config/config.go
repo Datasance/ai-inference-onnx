@@ -32,6 +32,7 @@ const (
 	defaultMaxPayloadBytes = 32 << 20 // 32 MiB
 	defaultMetricsInterval = 10 * time.Second
 	defaultConfigPath      = "/etc/inference/config.yaml"
+	defaultLogLevel        = "info"
 	minStaticTokenBytes    = 32
 	serverIDBytes          = 16
 )
@@ -56,6 +57,18 @@ type Config struct {
 	NATSServerURL string
 	// NATSCredsPath is the NATS credentials file. Empty means unset.
 	NATSCredsPath string
+	// NATSCAFile is the authority trusted for a TLS NATS server. Empty means unset.
+	NATSCAFile string
+	// TLSEnabled is true when REST and gRPC present a certificate.
+	TLSEnabled bool
+	// TLSCert is the certificate presented by REST and gRPC. Empty means unset.
+	TLSCert string
+	// TLSKey is the private key for TLSCert. Empty means unset.
+	TLSKey string
+	// TLSCA is the authority client certificates must chain to. Empty means clients do not present one.
+	TLSCA string
+	// LogLevel is debug, info, warn, or error.
+	LogLevel string
 	// IntraOpThreads is the intra-op thread count.
 	IntraOpThreads int
 	// InterOpThreads is the inter-op thread count.
@@ -93,6 +106,12 @@ type fileConfig struct {
 	AuthStaticToken        *string `yaml:"authStaticToken"`
 	NATSServerURL          *string `yaml:"natsServerUrl"`
 	NATSCredsPath          *string `yaml:"natsCredsPath"`
+	NATSCAFile             *string `yaml:"natsCAFile"`
+	TLSEnabled             *bool   `yaml:"tlsEnabled"`
+	TLSCert                *string `yaml:"tlsCert"`
+	TLSKey                 *string `yaml:"tlsKey"`
+	TLSCA                  *string `yaml:"tlsCA"`
+	LogLevel               *string `yaml:"logLevel"`
 	IntraOpThreads         *int    `yaml:"intraOpThreads"`
 	InterOpThreads         *int    `yaml:"interOpThreads"`
 	MaxPayloadBytes        *int    `yaml:"maxPayloadBytes"`
@@ -120,7 +139,7 @@ func Load() (Config, error) {
 	}
 	cfg.ServerID = serverID
 	applyLabels(&cfg)
-	if err := validate(cfg); err != nil {
+	if err := validate(&cfg); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
@@ -138,6 +157,7 @@ func defaults() Config {
 		MaxPayloadBytes: defaultMaxPayloadBytes,
 		QueueCapacity:   defaultQueueCapacity,
 		MetricsInterval: defaultMetricsInterval,
+		LogLevel:        defaultLogLevel,
 	}
 }
 
@@ -174,6 +194,14 @@ func applyFile(cfg *Config) (string, bool, error) {
 	setRaw(&cfg.AuthStaticToken, file.AuthStaticToken)
 	setTrimmed(&cfg.NATSServerURL, file.NATSServerURL)
 	setTrimmed(&cfg.NATSCredsPath, file.NATSCredsPath)
+	setNonEmpty(&cfg.NATSCAFile, file.NATSCAFile)
+	if file.TLSEnabled != nil {
+		cfg.TLSEnabled = *file.TLSEnabled
+	}
+	setTrimmed(&cfg.TLSCert, file.TLSCert)
+	setTrimmed(&cfg.TLSKey, file.TLSKey)
+	setTrimmed(&cfg.TLSCA, file.TLSCA)
+	setNonEmpty(&cfg.LogLevel, file.LogLevel)
 	setInt(&cfg.IntraOpThreads, file.IntraOpThreads)
 	setInt(&cfg.InterOpThreads, file.InterOpThreads)
 	setInt(&cfg.MaxPayloadBytes, file.MaxPayloadBytes)
@@ -216,6 +244,14 @@ func applyEnv(cfg *Config) error {
 	}
 	applyTrimmedEnv(&cfg.NATSServerURL, "NATS_SERVER_URL")
 	applyTrimmedEnv(&cfg.NATSCredsPath, "NATS_CREDS_PATH")
+	applyNonEmptyEnv(&cfg.NATSCAFile, "NATS_CA_FILE")
+	if err := applyBoolEnv(&cfg.TLSEnabled, "TLS_ENABLED"); err != nil {
+		return err
+	}
+	applyTrimmedEnv(&cfg.TLSCert, "TLS_CERT")
+	applyTrimmedEnv(&cfg.TLSKey, "TLS_KEY")
+	applyTrimmedEnv(&cfg.TLSCA, "TLS_CA")
+	applyNonEmptyEnv(&cfg.LogLevel, "LOG_LEVEL")
 	if err := applyIntEnv(&cfg.IntraOpThreads, "INTRA_OP_THREADS"); err != nil {
 		return err
 	}
@@ -248,7 +284,17 @@ func label(key string) string {
 	return value
 }
 
-func validate(cfg Config) error {
+func validate(cfg *Config) error {
+	if err := validateAuth(*cfg); err != nil {
+		return err
+	}
+	if err := validateLogLevel(cfg); err != nil {
+		return err
+	}
+	return validateTLS(*cfg)
+}
+
+func validateAuth(cfg Config) error {
 	switch cfg.AuthMode {
 	case AuthDisabled, AuthEdgelet, AuthStatic:
 	case "":
@@ -266,6 +312,49 @@ func validate(cfg Config) error {
 		return errors.New("static token must be at least 32 bytes")
 	}
 	return nil
+}
+
+func validateLogLevel(cfg *Config) error {
+	canonical := strings.ToLower(cfg.LogLevel)
+	switch canonical {
+	case "debug", "info", "warn", "error":
+		cfg.LogLevel = canonical
+		return nil
+	default:
+		return fmt.Errorf("log level %q is not supported", cfg.LogLevel)
+	}
+}
+
+// validateTLS requires a readable certificate and key when TLS is on.
+// A client CA, when set, must be readable too. When TLS is off, the three paths are not opened.
+func validateTLS(cfg Config) error {
+	if !cfg.TLSEnabled {
+		return nil
+	}
+	if cfg.TLSCert == "" || cfg.TLSKey == "" {
+		return errors.New("tls certificate and key are required")
+	}
+	if err := readableFile(cfg.TLSCert); err != nil {
+		return fmt.Errorf("open tls certificate: %w", err)
+	}
+	if err := readableFile(cfg.TLSKey); err != nil {
+		return fmt.Errorf("open tls key: %w", err)
+	}
+	if cfg.TLSCA == "" {
+		return nil
+	}
+	if err := readableFile(cfg.TLSCA); err != nil {
+		return fmt.Errorf("open tls ca: %w", err)
+	}
+	return nil
+}
+
+func readableFile(path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	return file.Close()
 }
 
 // resolveServerID picks the platform uid, then ENGINE_SERVER_ID, then the file, then a new id.
@@ -319,6 +408,37 @@ func applyTrimmedEnv(dst *string, key string) {
 	*dst = strings.TrimSpace(raw)
 }
 
+// applyNonEmptyEnv stores a trimmed environment value. An empty value counts as unset.
+func applyNonEmptyEnv(dst *string, key string) {
+	raw, ok := os.LookupEnv(key)
+	if !ok {
+		return
+	}
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return
+	}
+	*dst = trimmed
+}
+
+// applyBoolEnv reads true or false, ignoring case. An empty value is an error.
+func applyBoolEnv(dst *bool, key string) error {
+	raw, ok := os.LookupEnv(key)
+	if !ok {
+		return nil
+	}
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "true":
+		*dst = true
+		return nil
+	case "false":
+		*dst = false
+		return nil
+	default:
+		return fmt.Errorf("%s must be true or false", key)
+	}
+}
+
 func applyIntEnv(dst *int, key string) error {
 	raw, ok := os.LookupEnv(key)
 	if !ok {
@@ -350,6 +470,18 @@ func setTrimmed(dst *string, src *string) {
 		return
 	}
 	*dst = strings.TrimSpace(*src)
+}
+
+// setNonEmpty stores a trimmed file value. An empty value counts as unset.
+func setNonEmpty(dst *string, src *string) {
+	if src == nil {
+		return
+	}
+	trimmed := strings.TrimSpace(*src)
+	if trimmed == "" {
+		return
+	}
+	*dst = trimmed
 }
 
 func setRaw(dst *string, src *string) {
