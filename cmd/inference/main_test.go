@@ -45,7 +45,7 @@ func TestDisabledMissingDirectoriesServesLiveNotReady(t *testing.T) {
 	waitLive(t, ports.http)
 	assertGET(t, ports.http, "/v2/health/live", http.StatusOK)
 	assertGET(t, ports.http, "/v2/health/ready", http.StatusBadRequest)
-	assertGRPCHealth(t, ports.grpc)
+	assertGRPCHealth(t, ports.grpc, false)
 	assertRefused(t, hostPort(ports.metrics))
 	assertAccepts(t, hostPort(ports.grpc))
 
@@ -60,9 +60,13 @@ func TestDisabledMissingDirectoriesServesLiveNotReady(t *testing.T) {
 func TestAuthModeUnsetExitsBeforeListen(t *testing.T) {
 	t.Parallel()
 	ports := pickPorts(t)
-	out := requireExitWithoutListen(t, processEnv(t, ports, nil), ports)
-	if strings.TrimSpace(out) == "" {
-		t.Fatal("expected a configuration error on stderr")
+	proc := requireExitWithoutListen(t, processEnv(t, ports, nil), ports)
+	lines := decodeLog(t, proc.stdout.String())
+	if len(lines) == 0 || !strings.EqualFold(lines[0].Level, "error") {
+		t.Fatalf("configuration log %+v", lines)
+	}
+	if strings.TrimSpace(proc.stderr.String()) != "" {
+		t.Fatalf("stderr %s", proc.stderr.String())
 	}
 }
 
@@ -83,12 +87,56 @@ func TestStaticShortTokenExitsWithoutLoggingToken(t *testing.T) {
 		t.Fatalf("token length %d", len(shortToken))
 	}
 	ports := pickPorts(t)
-	out := requireExitWithoutListen(t, processEnv(t, ports, map[string]string{
+	proc := requireExitWithoutListen(t, processEnv(t, ports, map[string]string{
 		"AUTH_MODE":         "static",
 		"AUTH_STATIC_TOKEN": shortToken,
 	}), ports)
+	out := proc.stdout.String() + proc.stderr.String()
 	if strings.Contains(out, shortToken) {
 		t.Fatalf("logs contain the token:\n%s", out)
+	}
+	lines := decodeLog(t, proc.stdout.String())
+	if len(lines) == 0 || !strings.EqualFold(lines[0].Level, "error") {
+		t.Fatalf("configuration log %+v", lines)
+	}
+	if strings.TrimSpace(proc.stderr.String()) != "" {
+		t.Fatalf("stderr %s", proc.stderr.String())
+	}
+}
+
+func TestStaticTokenAbsentFromLiveLog(t *testing.T) {
+	t.Parallel()
+	const token = "live-token-7c2e91ab44d06f83e1a9b0c5"
+	if len(token) < 32 {
+		t.Fatalf("token length %d", len(token))
+	}
+	ports := pickPorts(t)
+	proc := startProcess(t, processEnv(t, ports, map[string]string{
+		"AUTH_MODE":         "static",
+		"AUTH_STATIC_TOKEN": token,
+	}))
+	t.Cleanup(proc.kill)
+
+	waitLive(t, ports.http)
+	status, body := getAuth(t, ports.http, "/v2/health/live", token)
+	if status != http.StatusOK || len(body) != 0 {
+		t.Fatalf("live status %d body %q", status, body)
+	}
+	stdout := waitLog(t, proc, "grpc listener is up")
+	if strings.Contains(stdout, token) || strings.Contains(proc.stderr.String(), token) {
+		t.Fatalf("logs contain the token:\n%s%s", stdout, proc.stderr.String())
+	}
+	if strings.TrimSpace(proc.stderr.String()) != "" {
+		t.Fatalf("stderr %s", proc.stderr.String())
+	}
+	var listeners int
+	for _, line := range decodeLog(t, stdout) {
+		if strings.EqualFold(line.Level, "info") && strings.Contains(line.Msg, "listener is up") {
+			listeners++
+		}
+	}
+	if listeners < 2 {
+		t.Fatalf("listener lines %d:\n%s", listeners, stdout)
 	}
 }
 
@@ -111,6 +159,7 @@ func TestDependenciesExcludeNATSAndRuntime(t *testing.T) {
 	t.Parallel()
 	cmd := exec.Command("go", "list", "-deps", "./cmd/inference")
 	cmd.Dir = moduleRoot(t)
+	cmd.Env = withoutCGO(os.Environ())
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("go list: %v\n%s", err, out)
@@ -205,7 +254,7 @@ func requireAbsent(t *testing.T, path string) {
 	t.Fatalf("%s exists", path)
 }
 
-func requireExitWithoutListen(t *testing.T, env []string, ports listenPorts) string {
+func requireExitWithoutListen(t *testing.T, env []string, ports listenPorts) *running {
 	t.Helper()
 	httpAddr := hostPort(ports.http)
 	grpcAddr := hostPort(ports.grpc)
@@ -231,7 +280,7 @@ func requireExitWithoutListen(t *testing.T, env []string, ports listenPorts) str
 	if !errors.As(err, &exitErr) {
 		t.Fatalf("exit: %v\n%s", err, proc.output())
 	}
-	return proc.output()
+	return proc
 }
 
 func watchPorts(ctx context.Context, accepted chan<- string, addrs ...string) {
@@ -281,6 +330,41 @@ func waitLive(t *testing.T, port int) {
 	t.Fatalf("live: %v", last)
 }
 
+func getAuth(t *testing.T, port int, path, token string) (int, []byte) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d%s", port, path), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := healthClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, body
+}
+
+func waitLog(t *testing.T, proc *running, contains string) string {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		out := proc.stdout.String()
+		if strings.Contains(out, contains) {
+			return out
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("log missing %q\nstdout %s\nstderr %s", contains, proc.stdout.String(), proc.stderr.String())
+	return ""
+}
+
 func get(t *testing.T, port int, path string) (int, []byte) {
 	t.Helper()
 	status, body, err := getErr(port, path)
@@ -316,7 +400,7 @@ var healthClient = &http.Client{
 	},
 }
 
-func assertGRPCHealth(t *testing.T, port int) {
+func assertGRPCHealth(t *testing.T, port int, readyWant bool) {
 	t.Helper()
 	conn, err := grpc.NewClient(
 		hostPort(port),
@@ -345,8 +429,8 @@ func assertGRPCHealth(t *testing.T, port int) {
 	if err != nil {
 		t.Fatalf("server ready: %v", err)
 	}
-	if ready.GetReady() {
-		t.Fatal("server ready is true")
+	if ready.GetReady() != readyWant {
+		t.Fatalf("server ready %v", ready.GetReady())
 	}
 }
 
@@ -453,6 +537,8 @@ func withoutCGO(env []string) []string {
 type running struct {
 	cmd    *exec.Cmd
 	out    lockedBuf
+	stdout lockedBuf
+	stderr lockedBuf
 	once   sync.Once
 	err    error
 	waited chan struct{}
@@ -463,8 +549,8 @@ func startProcess(t *testing.T, env []string) *running {
 	cmd := exec.Command(inferenceBinary(t))
 	cmd.Env = env
 	proc := &running{cmd: cmd, waited: make(chan struct{})}
-	cmd.Stdout = &proc.out
-	cmd.Stderr = &proc.out
+	cmd.Stdout = &proc.stdout
+	cmd.Stderr = &proc.stderr
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -476,7 +562,7 @@ func (p *running) signal(sig os.Signal) error {
 }
 
 func (p *running) output() string {
-	return p.out.String()
+	return p.out.String() + p.stdout.String() + p.stderr.String()
 }
 
 func (p *running) wait() error {

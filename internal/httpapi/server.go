@@ -1,5 +1,5 @@
-// Package httpapi serves health checks on plain HTTP and requires
-// authentication on every other path.
+// Package httpapi serves health checks and requires authentication on every other path.
+// The listener is plain HTTP unless a certificate is configured.
 package httpapi
 
 import (
@@ -22,7 +22,7 @@ const (
 	pathReady = "/v2/health/ready"
 )
 
-// ListenAddr returns the plain HTTP listen address for port.
+// ListenAddr returns the listen address for port.
 // The host is empty, so the listener accepts every interface.
 func ListenAddr(port int) string {
 	return net.JoinHostPort("", strconv.Itoa(port))
