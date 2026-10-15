@@ -1,9 +1,11 @@
-// Package httpapi serves health checks and requires authentication on every other path.
+// Package httpapi serves health checks, model metadata, the repository index, and infer.
+// Every path except live and ready requires authentication.
 // The listener is plain HTTP unless a certificate is configured.
 package httpapi
 
 import (
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
@@ -32,6 +34,10 @@ func ListenAddr(port int) string {
 type Server struct {
 	checker *auth.Checker
 	ready   func() bool
+	catalog Catalog
+	runner  Runner
+	payload int
+	logger  *slog.Logger
 	mux     *http.ServeMux
 }
 
@@ -97,7 +103,11 @@ func (s *Server) readyNow() bool {
 }
 
 func writeMethodNotAllowed(w http.ResponseWriter) {
-	w.Header().Set("Allow", http.MethodGet)
+	writeAllowed(w, http.MethodGet)
+}
+
+func writeAllowed(w http.ResponseWriter, method string) {
+	w.Header().Set("Allow", method)
 	writeJSON(w, http.StatusMethodNotAllowed, errorMethodNotAllowed)
 }
 
