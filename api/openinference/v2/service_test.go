@@ -25,6 +25,9 @@ func TestOpenInferenceService(t *testing.T) {
 		"ServerMetadata",
 		"ModelMetadata",
 		"ModelInfer",
+		"RepositoryIndex",
+		"RepositoryModelLoad",
+		"RepositoryModelUnload",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("methods %v", got)

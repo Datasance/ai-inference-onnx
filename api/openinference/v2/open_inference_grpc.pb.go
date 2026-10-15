@@ -1028,6 +1028,425 @@ func (x *InferTensorContents) GetBytesContents() [][]byte {
 	return nil
 }
 
+type RepositoryIndexRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The name of the repository. Empty means the repository this process serves.
+	RepositoryName string `protobuf:"bytes,1,opt,name=repository_name,json=repositoryName,proto3" json:"repository_name,omitempty"`
+	// If true return only models currently ready for inferencing.
+	Ready         bool `protobuf:"varint,2,opt,name=ready,proto3" json:"ready,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepositoryIndexRequest) Reset() {
+	*x = RepositoryIndexRequest{}
+	mi := &file_open_inference_grpc_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepositoryIndexRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepositoryIndexRequest) ProtoMessage() {}
+
+func (x *RepositoryIndexRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_open_inference_grpc_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepositoryIndexRequest.ProtoReflect.Descriptor instead.
+func (*RepositoryIndexRequest) Descriptor() ([]byte, []int) {
+	return file_open_inference_grpc_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *RepositoryIndexRequest) GetRepositoryName() string {
+	if x != nil {
+		return x.RepositoryName
+	}
+	return ""
+}
+
+func (x *RepositoryIndexRequest) GetReady() bool {
+	if x != nil {
+		return x.Ready
+	}
+	return false
+}
+
+type RepositoryIndexResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// An index entry for each model.
+	Models        []*RepositoryIndexResponse_ModelIndex `protobuf:"bytes,1,rep,name=models,proto3" json:"models,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepositoryIndexResponse) Reset() {
+	*x = RepositoryIndexResponse{}
+	mi := &file_open_inference_grpc_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepositoryIndexResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepositoryIndexResponse) ProtoMessage() {}
+
+func (x *RepositoryIndexResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_open_inference_grpc_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepositoryIndexResponse.ProtoReflect.Descriptor instead.
+func (*RepositoryIndexResponse) Descriptor() ([]byte, []int) {
+	return file_open_inference_grpc_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *RepositoryIndexResponse) GetModels() []*RepositoryIndexResponse_ModelIndex {
+	if x != nil {
+		return x.Models
+	}
+	return nil
+}
+
+type RepositoryModelLoadRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The name of the repository to load from. Empty means the repository this process serves.
+	RepositoryName string `protobuf:"bytes,1,opt,name=repository_name,json=repositoryName,proto3" json:"repository_name,omitempty"`
+	// The name of the model to load, or reload.
+	ModelName string `protobuf:"bytes,2,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
+	// Optional parameters.
+	Parameters    map[string]*ModelRepositoryParameter `protobuf:"bytes,3,rep,name=parameters,proto3" json:"parameters,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepositoryModelLoadRequest) Reset() {
+	*x = RepositoryModelLoadRequest{}
+	mi := &file_open_inference_grpc_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepositoryModelLoadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepositoryModelLoadRequest) ProtoMessage() {}
+
+func (x *RepositoryModelLoadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_open_inference_grpc_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepositoryModelLoadRequest.ProtoReflect.Descriptor instead.
+func (*RepositoryModelLoadRequest) Descriptor() ([]byte, []int) {
+	return file_open_inference_grpc_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *RepositoryModelLoadRequest) GetRepositoryName() string {
+	if x != nil {
+		return x.RepositoryName
+	}
+	return ""
+}
+
+func (x *RepositoryModelLoadRequest) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *RepositoryModelLoadRequest) GetParameters() map[string]*ModelRepositoryParameter {
+	if x != nil {
+		return x.Parameters
+	}
+	return nil
+}
+
+type RepositoryModelLoadResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepositoryModelLoadResponse) Reset() {
+	*x = RepositoryModelLoadResponse{}
+	mi := &file_open_inference_grpc_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepositoryModelLoadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepositoryModelLoadResponse) ProtoMessage() {}
+
+func (x *RepositoryModelLoadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_open_inference_grpc_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepositoryModelLoadResponse.ProtoReflect.Descriptor instead.
+func (*RepositoryModelLoadResponse) Descriptor() ([]byte, []int) {
+	return file_open_inference_grpc_proto_rawDescGZIP(), []int{17}
+}
+
+type RepositoryModelUnloadRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The name of the repository from which the model was originally loaded.
+	// Empty means the repository is not considered.
+	RepositoryName string `protobuf:"bytes,1,opt,name=repository_name,json=repositoryName,proto3" json:"repository_name,omitempty"`
+	// The name of the model to unload.
+	ModelName string `protobuf:"bytes,2,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
+	// Optional parameters.
+	Parameters    map[string]*ModelRepositoryParameter `protobuf:"bytes,3,rep,name=parameters,proto3" json:"parameters,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepositoryModelUnloadRequest) Reset() {
+	*x = RepositoryModelUnloadRequest{}
+	mi := &file_open_inference_grpc_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepositoryModelUnloadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepositoryModelUnloadRequest) ProtoMessage() {}
+
+func (x *RepositoryModelUnloadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_open_inference_grpc_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepositoryModelUnloadRequest.ProtoReflect.Descriptor instead.
+func (*RepositoryModelUnloadRequest) Descriptor() ([]byte, []int) {
+	return file_open_inference_grpc_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *RepositoryModelUnloadRequest) GetRepositoryName() string {
+	if x != nil {
+		return x.RepositoryName
+	}
+	return ""
+}
+
+func (x *RepositoryModelUnloadRequest) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *RepositoryModelUnloadRequest) GetParameters() map[string]*ModelRepositoryParameter {
+	if x != nil {
+		return x.Parameters
+	}
+	return nil
+}
+
+type RepositoryModelUnloadResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepositoryModelUnloadResponse) Reset() {
+	*x = RepositoryModelUnloadResponse{}
+	mi := &file_open_inference_grpc_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepositoryModelUnloadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepositoryModelUnloadResponse) ProtoMessage() {}
+
+func (x *RepositoryModelUnloadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_open_inference_grpc_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepositoryModelUnloadResponse.ProtoReflect.Descriptor instead.
+func (*RepositoryModelUnloadResponse) Descriptor() ([]byte, []int) {
+	return file_open_inference_grpc_proto_rawDescGZIP(), []int{19}
+}
+
+type ModelRepositoryParameter struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The parameter value can be a string, an int64, a boolean
+	// or a message specific to a predefined parameter.
+	//
+	// Types that are valid to be assigned to ParameterChoice:
+	//
+	//	*ModelRepositoryParameter_BoolParam
+	//	*ModelRepositoryParameter_Int64Param
+	//	*ModelRepositoryParameter_StringParam
+	//	*ModelRepositoryParameter_BytesParam
+	ParameterChoice isModelRepositoryParameter_ParameterChoice `protobuf_oneof:"parameter_choice"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ModelRepositoryParameter) Reset() {
+	*x = ModelRepositoryParameter{}
+	mi := &file_open_inference_grpc_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelRepositoryParameter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelRepositoryParameter) ProtoMessage() {}
+
+func (x *ModelRepositoryParameter) ProtoReflect() protoreflect.Message {
+	mi := &file_open_inference_grpc_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelRepositoryParameter.ProtoReflect.Descriptor instead.
+func (*ModelRepositoryParameter) Descriptor() ([]byte, []int) {
+	return file_open_inference_grpc_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ModelRepositoryParameter) GetParameterChoice() isModelRepositoryParameter_ParameterChoice {
+	if x != nil {
+		return x.ParameterChoice
+	}
+	return nil
+}
+
+func (x *ModelRepositoryParameter) GetBoolParam() bool {
+	if x != nil {
+		if x, ok := x.ParameterChoice.(*ModelRepositoryParameter_BoolParam); ok {
+			return x.BoolParam
+		}
+	}
+	return false
+}
+
+func (x *ModelRepositoryParameter) GetInt64Param() int64 {
+	if x != nil {
+		if x, ok := x.ParameterChoice.(*ModelRepositoryParameter_Int64Param); ok {
+			return x.Int64Param
+		}
+	}
+	return 0
+}
+
+func (x *ModelRepositoryParameter) GetStringParam() string {
+	if x != nil {
+		if x, ok := x.ParameterChoice.(*ModelRepositoryParameter_StringParam); ok {
+			return x.StringParam
+		}
+	}
+	return ""
+}
+
+func (x *ModelRepositoryParameter) GetBytesParam() []byte {
+	if x != nil {
+		if x, ok := x.ParameterChoice.(*ModelRepositoryParameter_BytesParam); ok {
+			return x.BytesParam
+		}
+	}
+	return nil
+}
+
+type isModelRepositoryParameter_ParameterChoice interface {
+	isModelRepositoryParameter_ParameterChoice()
+}
+
+type ModelRepositoryParameter_BoolParam struct {
+	// A boolean parameter value.
+	BoolParam bool `protobuf:"varint,1,opt,name=bool_param,json=boolParam,proto3,oneof"`
+}
+
+type ModelRepositoryParameter_Int64Param struct {
+	// An int64 parameter value.
+	Int64Param int64 `protobuf:"varint,2,opt,name=int64_param,json=int64Param,proto3,oneof"`
+}
+
+type ModelRepositoryParameter_StringParam struct {
+	// A string parameter value.
+	StringParam string `protobuf:"bytes,3,opt,name=string_param,json=stringParam,proto3,oneof"`
+}
+
+type ModelRepositoryParameter_BytesParam struct {
+	// A bytes parameter value.
+	BytesParam []byte `protobuf:"bytes,4,opt,name=bytes_param,json=bytesParam,proto3,oneof"`
+}
+
+func (*ModelRepositoryParameter_BoolParam) isModelRepositoryParameter_ParameterChoice() {}
+
+func (*ModelRepositoryParameter_Int64Param) isModelRepositoryParameter_ParameterChoice() {}
+
+func (*ModelRepositoryParameter_StringParam) isModelRepositoryParameter_ParameterChoice() {}
+
+func (*ModelRepositoryParameter_BytesParam) isModelRepositoryParameter_ParameterChoice() {}
+
 // Metadata for a tensor.
 type ModelMetadataResponse_TensorMetadata struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1044,7 +1463,7 @@ type ModelMetadataResponse_TensorMetadata struct {
 
 func (x *ModelMetadataResponse_TensorMetadata) Reset() {
 	*x = ModelMetadataResponse_TensorMetadata{}
-	mi := &file_open_inference_grpc_proto_msgTypes[14]
+	mi := &file_open_inference_grpc_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1056,7 +1475,7 @@ func (x *ModelMetadataResponse_TensorMetadata) String() string {
 func (*ModelMetadataResponse_TensorMetadata) ProtoMessage() {}
 
 func (x *ModelMetadataResponse_TensorMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_open_inference_grpc_proto_msgTypes[14]
+	mi := &file_open_inference_grpc_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1114,7 +1533,7 @@ type ModelInferRequest_InferInputTensor struct {
 
 func (x *ModelInferRequest_InferInputTensor) Reset() {
 	*x = ModelInferRequest_InferInputTensor{}
-	mi := &file_open_inference_grpc_proto_msgTypes[16]
+	mi := &file_open_inference_grpc_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1126,7 +1545,7 @@ func (x *ModelInferRequest_InferInputTensor) String() string {
 func (*ModelInferRequest_InferInputTensor) ProtoMessage() {}
 
 func (x *ModelInferRequest_InferInputTensor) ProtoReflect() protoreflect.Message {
-	mi := &file_open_inference_grpc_proto_msgTypes[16]
+	mi := &file_open_inference_grpc_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1190,7 +1609,7 @@ type ModelInferRequest_InferRequestedOutputTensor struct {
 
 func (x *ModelInferRequest_InferRequestedOutputTensor) Reset() {
 	*x = ModelInferRequest_InferRequestedOutputTensor{}
-	mi := &file_open_inference_grpc_proto_msgTypes[17]
+	mi := &file_open_inference_grpc_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1202,7 +1621,7 @@ func (x *ModelInferRequest_InferRequestedOutputTensor) String() string {
 func (*ModelInferRequest_InferRequestedOutputTensor) ProtoMessage() {}
 
 func (x *ModelInferRequest_InferRequestedOutputTensor) ProtoReflect() protoreflect.Message {
-	mi := &file_open_inference_grpc_proto_msgTypes[17]
+	mi := &file_open_inference_grpc_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1253,7 +1672,7 @@ type ModelInferResponse_InferOutputTensor struct {
 
 func (x *ModelInferResponse_InferOutputTensor) Reset() {
 	*x = ModelInferResponse_InferOutputTensor{}
-	mi := &file_open_inference_grpc_proto_msgTypes[21]
+	mi := &file_open_inference_grpc_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1265,7 +1684,7 @@ func (x *ModelInferResponse_InferOutputTensor) String() string {
 func (*ModelInferResponse_InferOutputTensor) ProtoMessage() {}
 
 func (x *ModelInferResponse_InferOutputTensor) ProtoReflect() protoreflect.Message {
-	mi := &file_open_inference_grpc_proto_msgTypes[21]
+	mi := &file_open_inference_grpc_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1314,6 +1733,79 @@ func (x *ModelInferResponse_InferOutputTensor) GetContents() *InferTensorContent
 		return x.Contents
 	}
 	return nil
+}
+
+// Index entry for a model.
+type RepositoryIndexResponse_ModelIndex struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The name of the model.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The version of the model.
+	Version string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	// The state of the model.
+	State string `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	// The reason, if any, that the model is in the given state.
+	Reason        string `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepositoryIndexResponse_ModelIndex) Reset() {
+	*x = RepositoryIndexResponse_ModelIndex{}
+	mi := &file_open_inference_grpc_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepositoryIndexResponse_ModelIndex) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepositoryIndexResponse_ModelIndex) ProtoMessage() {}
+
+func (x *RepositoryIndexResponse_ModelIndex) ProtoReflect() protoreflect.Message {
+	mi := &file_open_inference_grpc_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepositoryIndexResponse_ModelIndex.ProtoReflect.Descriptor instead.
+func (*RepositoryIndexResponse_ModelIndex) Descriptor() ([]byte, []int) {
+	return file_open_inference_grpc_proto_rawDescGZIP(), []int{15, 0}
+}
+
+func (x *RepositoryIndexResponse_ModelIndex) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *RepositoryIndexResponse_ModelIndex) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *RepositoryIndexResponse_ModelIndex) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *RepositoryIndexResponse_ModelIndex) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
 }
 
 var File_open_inference_grpc_proto protoreflect.FileDescriptor
@@ -1432,7 +1924,49 @@ const file_open_inference_grpc_proto_rawDesc = "" +
 	"\x0fuint64_contents\x18\x05 \x03(\x04R\x0euint64Contents\x12#\n" +
 	"\rfp32_contents\x18\x06 \x03(\x02R\ffp32Contents\x12#\n" +
 	"\rfp64_contents\x18\a \x03(\x01R\ffp64Contents\x12%\n" +
-	"\x0ebytes_contents\x18\b \x03(\fR\rbytesContents2\xfc\x03\n" +
+	"\x0ebytes_contents\x18\b \x03(\fR\rbytesContents\"W\n" +
+	"\x16RepositoryIndexRequest\x12'\n" +
+	"\x0frepository_name\x18\x01 \x01(\tR\x0erepositoryName\x12\x14\n" +
+	"\x05ready\x18\x02 \x01(\bR\x05ready\"\xca\x01\n" +
+	"\x17RepositoryIndexResponse\x12E\n" +
+	"\x06models\x18\x01 \x03(\v2-.inference.RepositoryIndexResponse.ModelIndexR\x06models\x1ah\n" +
+	"\n" +
+	"ModelIndex\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x14\n" +
+	"\x05state\x18\x03 \x01(\tR\x05state\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"\x9f\x02\n" +
+	"\x1aRepositoryModelLoadRequest\x12'\n" +
+	"\x0frepository_name\x18\x01 \x01(\tR\x0erepositoryName\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x02 \x01(\tR\tmodelName\x12U\n" +
+	"\n" +
+	"parameters\x18\x03 \x03(\v25.inference.RepositoryModelLoadRequest.ParametersEntryR\n" +
+	"parameters\x1ab\n" +
+	"\x0fParametersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x129\n" +
+	"\x05value\x18\x02 \x01(\v2#.inference.ModelRepositoryParameterR\x05value:\x028\x01\"\x1d\n" +
+	"\x1bRepositoryModelLoadResponse\"\xa3\x02\n" +
+	"\x1cRepositoryModelUnloadRequest\x12'\n" +
+	"\x0frepository_name\x18\x01 \x01(\tR\x0erepositoryName\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x02 \x01(\tR\tmodelName\x12W\n" +
+	"\n" +
+	"parameters\x18\x03 \x03(\v27.inference.RepositoryModelUnloadRequest.ParametersEntryR\n" +
+	"parameters\x1ab\n" +
+	"\x0fParametersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x129\n" +
+	"\x05value\x18\x02 \x01(\v2#.inference.ModelRepositoryParameterR\x05value:\x028\x01\"\x1f\n" +
+	"\x1dRepositoryModelUnloadResponse\"\xba\x01\n" +
+	"\x18ModelRepositoryParameter\x12\x1f\n" +
+	"\n" +
+	"bool_param\x18\x01 \x01(\bH\x00R\tboolParam\x12!\n" +
+	"\vint64_param\x18\x02 \x01(\x03H\x00R\n" +
+	"int64Param\x12#\n" +
+	"\fstring_param\x18\x03 \x01(\tH\x00R\vstringParam\x12!\n" +
+	"\vbytes_param\x18\x04 \x01(\fH\x00R\n" +
+	"bytesParamB\x12\n" +
+	"\x10parameter_choice2\xae\x06\n" +
 	"\x14GRPCInferenceService\x12K\n" +
 	"\n" +
 	"ServerLive\x12\x1c.inference.ServerLiveRequest\x1a\x1d.inference.ServerLiveResponse\"\x00\x12N\n" +
@@ -1442,7 +1976,10 @@ const file_open_inference_grpc_proto_rawDesc = "" +
 	"\x0eServerMetadata\x12 .inference.ServerMetadataRequest\x1a!.inference.ServerMetadataResponse\"\x00\x12T\n" +
 	"\rModelMetadata\x12\x1f.inference.ModelMetadataRequest\x1a .inference.ModelMetadataResponse\"\x00\x12K\n" +
 	"\n" +
-	"ModelInfer\x12\x1c.inference.ModelInferRequest\x1a\x1d.inference.ModelInferResponse\"\x00BOZMgithub.com/eclipse-iofog/ai-inference-onnx/api/openinference/v2;openinferenceb\x06proto3"
+	"ModelInfer\x12\x1c.inference.ModelInferRequest\x1a\x1d.inference.ModelInferResponse\"\x00\x12Z\n" +
+	"\x0fRepositoryIndex\x12!.inference.RepositoryIndexRequest\x1a\".inference.RepositoryIndexResponse\"\x00\x12f\n" +
+	"\x13RepositoryModelLoad\x12%.inference.RepositoryModelLoadRequest\x1a&.inference.RepositoryModelLoadResponse\"\x00\x12l\n" +
+	"\x15RepositoryModelUnload\x12'.inference.RepositoryModelUnloadRequest\x1a(.inference.RepositoryModelUnloadResponse\"\x00BOZMgithub.com/eclipse-iofog/ai-inference-onnx/api/openinference/v2;openinferenceb\x06proto3"
 
 var (
 	file_open_inference_grpc_proto_rawDescOnce sync.Once
@@ -1451,12 +1988,12 @@ var (
 
 func file_open_inference_grpc_proto_rawDescGZIP() []byte {
 	file_open_inference_grpc_proto_rawDescOnce.Do(func() {
-		file_open_inference_grpc_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_open_inference_grpc_proto_rawDesc), len(file_open_inference_grpc_proto_rawDesc))) // #nosec G103 -- generated descriptor
+		file_open_inference_grpc_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_open_inference_grpc_proto_rawDesc), len(file_open_inference_grpc_proto_rawDesc)))
 	})
 	return file_open_inference_grpc_proto_rawDescData
 }
 
-var file_open_inference_grpc_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_open_inference_grpc_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_open_inference_grpc_proto_goTypes = []any{
 	(*ServerLiveRequest)(nil),                    // 0: inference.ServerLiveRequest
 	(*ServerLiveResponse)(nil),                   // 1: inference.ServerLiveResponse
@@ -1472,53 +2009,74 @@ var file_open_inference_grpc_proto_goTypes = []any{
 	(*ModelInferResponse)(nil),                   // 11: inference.ModelInferResponse
 	(*InferParameter)(nil),                       // 12: inference.InferParameter
 	(*InferTensorContents)(nil),                  // 13: inference.InferTensorContents
-	(*ModelMetadataResponse_TensorMetadata)(nil), // 14: inference.ModelMetadataResponse.TensorMetadata
-	nil, // 15: inference.ModelMetadataResponse.PropertiesEntry
-	(*ModelInferRequest_InferInputTensor)(nil),           // 16: inference.ModelInferRequest.InferInputTensor
-	(*ModelInferRequest_InferRequestedOutputTensor)(nil), // 17: inference.ModelInferRequest.InferRequestedOutputTensor
-	nil, // 18: inference.ModelInferRequest.ParametersEntry
-	nil, // 19: inference.ModelInferRequest.InferInputTensor.ParametersEntry
-	nil, // 20: inference.ModelInferRequest.InferRequestedOutputTensor.ParametersEntry
-	(*ModelInferResponse_InferOutputTensor)(nil), // 21: inference.ModelInferResponse.InferOutputTensor
-	nil, // 22: inference.ModelInferResponse.ParametersEntry
-	nil, // 23: inference.ModelInferResponse.InferOutputTensor.ParametersEntry
+	(*RepositoryIndexRequest)(nil),               // 14: inference.RepositoryIndexRequest
+	(*RepositoryIndexResponse)(nil),              // 15: inference.RepositoryIndexResponse
+	(*RepositoryModelLoadRequest)(nil),           // 16: inference.RepositoryModelLoadRequest
+	(*RepositoryModelLoadResponse)(nil),          // 17: inference.RepositoryModelLoadResponse
+	(*RepositoryModelUnloadRequest)(nil),         // 18: inference.RepositoryModelUnloadRequest
+	(*RepositoryModelUnloadResponse)(nil),        // 19: inference.RepositoryModelUnloadResponse
+	(*ModelRepositoryParameter)(nil),             // 20: inference.ModelRepositoryParameter
+	(*ModelMetadataResponse_TensorMetadata)(nil), // 21: inference.ModelMetadataResponse.TensorMetadata
+	nil, // 22: inference.ModelMetadataResponse.PropertiesEntry
+	(*ModelInferRequest_InferInputTensor)(nil),           // 23: inference.ModelInferRequest.InferInputTensor
+	(*ModelInferRequest_InferRequestedOutputTensor)(nil), // 24: inference.ModelInferRequest.InferRequestedOutputTensor
+	nil, // 25: inference.ModelInferRequest.ParametersEntry
+	nil, // 26: inference.ModelInferRequest.InferInputTensor.ParametersEntry
+	nil, // 27: inference.ModelInferRequest.InferRequestedOutputTensor.ParametersEntry
+	(*ModelInferResponse_InferOutputTensor)(nil), // 28: inference.ModelInferResponse.InferOutputTensor
+	nil, // 29: inference.ModelInferResponse.ParametersEntry
+	nil, // 30: inference.ModelInferResponse.InferOutputTensor.ParametersEntry
+	(*RepositoryIndexResponse_ModelIndex)(nil), // 31: inference.RepositoryIndexResponse.ModelIndex
+	nil, // 32: inference.RepositoryModelLoadRequest.ParametersEntry
+	nil, // 33: inference.RepositoryModelUnloadRequest.ParametersEntry
 }
 var file_open_inference_grpc_proto_depIdxs = []int32{
-	14, // 0: inference.ModelMetadataResponse.inputs:type_name -> inference.ModelMetadataResponse.TensorMetadata
-	14, // 1: inference.ModelMetadataResponse.outputs:type_name -> inference.ModelMetadataResponse.TensorMetadata
-	15, // 2: inference.ModelMetadataResponse.properties:type_name -> inference.ModelMetadataResponse.PropertiesEntry
-	18, // 3: inference.ModelInferRequest.parameters:type_name -> inference.ModelInferRequest.ParametersEntry
-	16, // 4: inference.ModelInferRequest.inputs:type_name -> inference.ModelInferRequest.InferInputTensor
-	17, // 5: inference.ModelInferRequest.outputs:type_name -> inference.ModelInferRequest.InferRequestedOutputTensor
-	22, // 6: inference.ModelInferResponse.parameters:type_name -> inference.ModelInferResponse.ParametersEntry
-	21, // 7: inference.ModelInferResponse.outputs:type_name -> inference.ModelInferResponse.InferOutputTensor
-	19, // 8: inference.ModelInferRequest.InferInputTensor.parameters:type_name -> inference.ModelInferRequest.InferInputTensor.ParametersEntry
-	13, // 9: inference.ModelInferRequest.InferInputTensor.contents:type_name -> inference.InferTensorContents
-	20, // 10: inference.ModelInferRequest.InferRequestedOutputTensor.parameters:type_name -> inference.ModelInferRequest.InferRequestedOutputTensor.ParametersEntry
-	12, // 11: inference.ModelInferRequest.ParametersEntry.value:type_name -> inference.InferParameter
-	12, // 12: inference.ModelInferRequest.InferInputTensor.ParametersEntry.value:type_name -> inference.InferParameter
-	12, // 13: inference.ModelInferRequest.InferRequestedOutputTensor.ParametersEntry.value:type_name -> inference.InferParameter
-	23, // 14: inference.ModelInferResponse.InferOutputTensor.parameters:type_name -> inference.ModelInferResponse.InferOutputTensor.ParametersEntry
-	13, // 15: inference.ModelInferResponse.InferOutputTensor.contents:type_name -> inference.InferTensorContents
-	12, // 16: inference.ModelInferResponse.ParametersEntry.value:type_name -> inference.InferParameter
-	12, // 17: inference.ModelInferResponse.InferOutputTensor.ParametersEntry.value:type_name -> inference.InferParameter
-	0,  // 18: inference.GRPCInferenceService.ServerLive:input_type -> inference.ServerLiveRequest
-	2,  // 19: inference.GRPCInferenceService.ServerReady:input_type -> inference.ServerReadyRequest
-	4,  // 20: inference.GRPCInferenceService.ModelReady:input_type -> inference.ModelReadyRequest
-	6,  // 21: inference.GRPCInferenceService.ServerMetadata:input_type -> inference.ServerMetadataRequest
-	8,  // 22: inference.GRPCInferenceService.ModelMetadata:input_type -> inference.ModelMetadataRequest
-	10, // 23: inference.GRPCInferenceService.ModelInfer:input_type -> inference.ModelInferRequest
-	1,  // 24: inference.GRPCInferenceService.ServerLive:output_type -> inference.ServerLiveResponse
-	3,  // 25: inference.GRPCInferenceService.ServerReady:output_type -> inference.ServerReadyResponse
-	5,  // 26: inference.GRPCInferenceService.ModelReady:output_type -> inference.ModelReadyResponse
-	7,  // 27: inference.GRPCInferenceService.ServerMetadata:output_type -> inference.ServerMetadataResponse
-	9,  // 28: inference.GRPCInferenceService.ModelMetadata:output_type -> inference.ModelMetadataResponse
-	11, // 29: inference.GRPCInferenceService.ModelInfer:output_type -> inference.ModelInferResponse
-	24, // [24:30] is the sub-list for method output_type
-	18, // [18:24] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	21, // 0: inference.ModelMetadataResponse.inputs:type_name -> inference.ModelMetadataResponse.TensorMetadata
+	21, // 1: inference.ModelMetadataResponse.outputs:type_name -> inference.ModelMetadataResponse.TensorMetadata
+	22, // 2: inference.ModelMetadataResponse.properties:type_name -> inference.ModelMetadataResponse.PropertiesEntry
+	25, // 3: inference.ModelInferRequest.parameters:type_name -> inference.ModelInferRequest.ParametersEntry
+	23, // 4: inference.ModelInferRequest.inputs:type_name -> inference.ModelInferRequest.InferInputTensor
+	24, // 5: inference.ModelInferRequest.outputs:type_name -> inference.ModelInferRequest.InferRequestedOutputTensor
+	29, // 6: inference.ModelInferResponse.parameters:type_name -> inference.ModelInferResponse.ParametersEntry
+	28, // 7: inference.ModelInferResponse.outputs:type_name -> inference.ModelInferResponse.InferOutputTensor
+	31, // 8: inference.RepositoryIndexResponse.models:type_name -> inference.RepositoryIndexResponse.ModelIndex
+	32, // 9: inference.RepositoryModelLoadRequest.parameters:type_name -> inference.RepositoryModelLoadRequest.ParametersEntry
+	33, // 10: inference.RepositoryModelUnloadRequest.parameters:type_name -> inference.RepositoryModelUnloadRequest.ParametersEntry
+	26, // 11: inference.ModelInferRequest.InferInputTensor.parameters:type_name -> inference.ModelInferRequest.InferInputTensor.ParametersEntry
+	13, // 12: inference.ModelInferRequest.InferInputTensor.contents:type_name -> inference.InferTensorContents
+	27, // 13: inference.ModelInferRequest.InferRequestedOutputTensor.parameters:type_name -> inference.ModelInferRequest.InferRequestedOutputTensor.ParametersEntry
+	12, // 14: inference.ModelInferRequest.ParametersEntry.value:type_name -> inference.InferParameter
+	12, // 15: inference.ModelInferRequest.InferInputTensor.ParametersEntry.value:type_name -> inference.InferParameter
+	12, // 16: inference.ModelInferRequest.InferRequestedOutputTensor.ParametersEntry.value:type_name -> inference.InferParameter
+	30, // 17: inference.ModelInferResponse.InferOutputTensor.parameters:type_name -> inference.ModelInferResponse.InferOutputTensor.ParametersEntry
+	13, // 18: inference.ModelInferResponse.InferOutputTensor.contents:type_name -> inference.InferTensorContents
+	12, // 19: inference.ModelInferResponse.ParametersEntry.value:type_name -> inference.InferParameter
+	12, // 20: inference.ModelInferResponse.InferOutputTensor.ParametersEntry.value:type_name -> inference.InferParameter
+	20, // 21: inference.RepositoryModelLoadRequest.ParametersEntry.value:type_name -> inference.ModelRepositoryParameter
+	20, // 22: inference.RepositoryModelUnloadRequest.ParametersEntry.value:type_name -> inference.ModelRepositoryParameter
+	0,  // 23: inference.GRPCInferenceService.ServerLive:input_type -> inference.ServerLiveRequest
+	2,  // 24: inference.GRPCInferenceService.ServerReady:input_type -> inference.ServerReadyRequest
+	4,  // 25: inference.GRPCInferenceService.ModelReady:input_type -> inference.ModelReadyRequest
+	6,  // 26: inference.GRPCInferenceService.ServerMetadata:input_type -> inference.ServerMetadataRequest
+	8,  // 27: inference.GRPCInferenceService.ModelMetadata:input_type -> inference.ModelMetadataRequest
+	10, // 28: inference.GRPCInferenceService.ModelInfer:input_type -> inference.ModelInferRequest
+	14, // 29: inference.GRPCInferenceService.RepositoryIndex:input_type -> inference.RepositoryIndexRequest
+	16, // 30: inference.GRPCInferenceService.RepositoryModelLoad:input_type -> inference.RepositoryModelLoadRequest
+	18, // 31: inference.GRPCInferenceService.RepositoryModelUnload:input_type -> inference.RepositoryModelUnloadRequest
+	1,  // 32: inference.GRPCInferenceService.ServerLive:output_type -> inference.ServerLiveResponse
+	3,  // 33: inference.GRPCInferenceService.ServerReady:output_type -> inference.ServerReadyResponse
+	5,  // 34: inference.GRPCInferenceService.ModelReady:output_type -> inference.ModelReadyResponse
+	7,  // 35: inference.GRPCInferenceService.ServerMetadata:output_type -> inference.ServerMetadataResponse
+	9,  // 36: inference.GRPCInferenceService.ModelMetadata:output_type -> inference.ModelMetadataResponse
+	11, // 37: inference.GRPCInferenceService.ModelInfer:output_type -> inference.ModelInferResponse
+	15, // 38: inference.GRPCInferenceService.RepositoryIndex:output_type -> inference.RepositoryIndexResponse
+	17, // 39: inference.GRPCInferenceService.RepositoryModelLoad:output_type -> inference.RepositoryModelLoadResponse
+	19, // 40: inference.GRPCInferenceService.RepositoryModelUnload:output_type -> inference.RepositoryModelUnloadResponse
+	32, // [32:41] is the sub-list for method output_type
+	23, // [23:32] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_open_inference_grpc_proto_init() }
@@ -1533,13 +2091,19 @@ func file_open_inference_grpc_proto_init() {
 		(*InferParameter_DoubleParam)(nil),
 		(*InferParameter_Uint64Param)(nil),
 	}
+	file_open_inference_grpc_proto_msgTypes[20].OneofWrappers = []any{
+		(*ModelRepositoryParameter_BoolParam)(nil),
+		(*ModelRepositoryParameter_Int64Param)(nil),
+		(*ModelRepositoryParameter_StringParam)(nil),
+		(*ModelRepositoryParameter_BytesParam)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_open_inference_grpc_proto_rawDesc), len(file_open_inference_grpc_proto_rawDesc)), // #nosec G103 -- generated descriptor
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_open_inference_grpc_proto_rawDesc), len(file_open_inference_grpc_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   24,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
