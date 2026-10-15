@@ -65,11 +65,13 @@ func (s *Server) ModelInfer(ctx context.Context, req *openinference.ModelInferRe
 		logged = chosen.Version
 	}
 	if err != nil {
+		batch.NoteFailure(s.runner, dir.Name, chosen.Version, err)
 		s.logInfer(name, logged, started, err)
 		return nil, statusFrom(err)
 	}
 	decoded, err := decodeInfer(chosen.Signature, req, s.payload)
 	if err != nil {
+		batch.NoteFailure(s.runner, dir.Name, chosen.Version, err)
 		s.logInfer(name, logged, started, err)
 		return nil, statusFrom(err)
 	}

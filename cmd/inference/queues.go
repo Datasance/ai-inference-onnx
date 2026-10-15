@@ -23,6 +23,7 @@ type inferQueues struct {
 	clock        batch.Clock
 	slot         func(name, version string) batch.Slot
 	admit        func(name, version string) error
+	recorder     batch.Recorder
 	settings     func(name, version string) (maxBatch int, delay time.Duration, ok bool)
 }
 
@@ -77,6 +78,7 @@ func (q *inferQueues) batcher(name, version string) (*batch.Batcher, error) {
 		Clock:        q.clock,
 		Slot:         slot,
 		Logger:       q.logger,
+		Recorder:     q.recorder,
 	})
 	if err != nil {
 		return nil, err

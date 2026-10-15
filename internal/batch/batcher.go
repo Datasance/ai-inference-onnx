@@ -53,6 +53,9 @@ type Config struct {
 	// Logger records batch timing at debug and failed runs at error. Nil logs nothing.
 	// The caller's outcome is logged by the transport that wrote it.
 	Logger *slog.Logger
+	// Recorder counts each finished request and how many are waiting.
+	// Nil counts nothing.
+	Recorder Recorder
 }
 
 // Batcher is the queue of one model version.
@@ -136,13 +139,16 @@ func (b *Batcher) Infer(ctx context.Context, req *Request) (*Reply, error) {
 		return nil, errNilRequest
 	}
 	if err := ctx.Err(); err != nil {
+		b.refuse(err)
 		return nil, err
 	}
 	if err := b.admit(); err != nil {
+		b.refuse(err)
 		return nil, err
 	}
 	rows, err := b.rows(req.Inputs)
 	if err != nil {
+		b.refuse(err)
 		return nil, err
 	}
 	w := &waiter{ctx: ctx, inputs: req.Inputs, rows: rows, done: make(chan outcome, 1)}
@@ -150,10 +156,12 @@ func (b *Batcher) Infer(ctx context.Context, req *Request) (*Reply, error) {
 	b.mu.Lock()
 	if len(b.queue) >= b.cfg.Capacity {
 		b.mu.Unlock()
+		b.refuse(ErrQueueFull)
 		return nil, ErrQueueFull
 	}
 	w.arrival = b.cfg.Clock.Now()
 	b.queue = append(b.queue, w)
+	b.publishPending()
 	b.signal()
 	if !b.draining {
 		b.draining = true
@@ -185,11 +193,13 @@ func (b *Batcher) wait(w *waiter, timeout time.Duration) (*Reply, error) {
 			return o.resp, o.err
 		case <-expired:
 			if b.withdraw(w) {
+				b.refuseWaiter(w, ErrQueueTimeout)
 				return nil, ErrQueueTimeout
 			}
 			expired = nil
 		case <-canceled:
 			if b.withdraw(w) {
+				b.refuseWaiter(w, w.ctx.Err())
 				return nil, w.ctx.Err()
 			}
 			canceled = nil
@@ -207,6 +217,7 @@ func (b *Batcher) withdraw(w *waiter) bool {
 	if i := slices.Index(b.queue, w); i >= 0 {
 		b.queue = slices.Delete(b.queue, i, i+1)
 	}
+	b.publishPending()
 	b.signal()
 	return true
 }
@@ -279,6 +290,7 @@ func (b *Batcher) drain() {
 			w.taken = true
 		}
 		b.queue = slices.Delete(b.queue, 0, n)
+		b.publishPending()
 		b.mu.Unlock()
 		b.run(batch)
 	}
@@ -326,18 +338,26 @@ func compatible(head, w *waiter) bool {
 
 func (b *Batcher) run(batch []*waiter) {
 	if err := b.admit(); err != nil {
+		b.recordEach(false, 0, time.Time{}, b.cfg.Clock.Now(), batch, func(*waiter) error { return err }, false)
 		for _, w := range batch {
 			w.done <- outcome{err: err}
 		}
 		return
 	}
+	var skipped []*waiter
 	live := make([]*waiter, 0, len(batch))
 	for _, w := range batch {
 		if err := w.ctx.Err(); err != nil {
-			w.done <- outcome{err: err}
+			skipped = append(skipped, w)
 			continue
 		}
 		live = append(live, w)
+	}
+	if len(skipped) > 0 {
+		b.recordEach(false, 0, time.Time{}, b.cfg.Clock.Now(), skipped, func(w *waiter) error { return w.ctx.Err() }, false)
+		for _, w := range skipped {
+			w.done <- outcome{err: w.ctx.Err()}
+		}
 	}
 	if len(live) > 1 && b.runStacked(live) {
 		return
@@ -351,7 +371,9 @@ func (b *Batcher) run(batch []*waiter) {
 func (b *Batcher) runAlone(w *waiter) {
 	start := b.cfg.Clock.Now()
 	outputs, release, err := b.cfg.Slot(w.ctx, w.inputs)
+	end := b.cfg.Clock.Now()
 	b.logRun(start, []*waiter{w}, err)
+	b.recordEach(err == nil || failureRan(err), end.Sub(start), start, end, []*waiter{w}, func(*waiter) error { return err }, true)
 	if err != nil {
 		if release != nil {
 			release()
@@ -384,6 +406,16 @@ func (b *Batcher) runStacked(live []*waiter) bool {
 	if release != nil {
 		release()
 	}
+	end := b.cfg.Clock.Now()
+	b.recordEach(err == nil || failureRan(err), end.Sub(start), start, end, live, func(w *waiter) error {
+		if err == nil {
+			return nil
+		}
+		if ctxErr := w.ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		return err
+	}, true)
 	for i, w := range live {
 		switch ctxErr := w.ctx.Err(); {
 		case err == nil:

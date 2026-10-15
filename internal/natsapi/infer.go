@@ -59,6 +59,7 @@ func (h *Handler) refuseInfer(conn publisher, msg *nats.Msg, sub Subject, starte
 func (h *Handler) inline(conn publisher, msg *nats.Msg, sub Subject, started time.Time) {
 	dir, chosen, err := batch.Select(h.directories(), sub.Model, sub.Version)
 	if err != nil {
+		batch.NoteFailure(h.cfg.Runner, dir.Name, chosen.Version, err)
 		h.refuseInfer(conn, msg, sub, started, err)
 		return
 	}
@@ -73,10 +74,13 @@ func (h *Handler) inline(conn publisher, msg *nats.Msg, sub Subject, started tim
 
 func (h *Handler) inlineBody(dir batch.Directory, chosen batch.ModelVersion, msg *nats.Msg) (batch.Encoded, error) {
 	if len(msg.Data) > max(h.cfg.MaxPayloadBytes, 0) {
-		return batch.Encoded{}, &batch.InvalidError{Reason: payloadTooLarge}
+		err := &batch.InvalidError{Reason: payloadTooLarge}
+		batch.NoteFailure(h.cfg.Runner, dir.Name, chosen.Version, err)
+		return batch.Encoded{}, err
 	}
 	headerLength, err := inferenceHeaderLength(msg.Header)
 	if err != nil {
+		batch.NoteFailure(h.cfg.Runner, dir.Name, chosen.Version, err)
 		return batch.Encoded{}, err
 	}
 	return h.execute(dir, chosen, msg.Data, headerLength)
@@ -87,6 +91,7 @@ func (h *Handler) inlineBody(dir batch.Directory, chosen batch.ModelVersion, msg
 func (h *Handler) execute(dir batch.Directory, chosen batch.ModelVersion, body []byte, headerLength int64) (batch.Encoded, error) {
 	req, err := batch.DecodeHTTP(chosen.Signature, body, headerLength)
 	if err != nil {
+		batch.NoteFailure(h.cfg.Runner, dir.Name, chosen.Version, err)
 		return batch.Encoded{}, err
 	}
 	reply, err := h.run(h.cfg.Context, dir.Name, chosen.Version, req)

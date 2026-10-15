@@ -69,24 +69,28 @@ func (s *Server) handleInfer(w http.ResponseWriter, r *http.Request) {
 		logged = chosen.Version
 	}
 	if err != nil {
+		batch.NoteFailure(s.runner, dir.Name, chosen.Version, err)
 		s.logInfer(name, logged, started, err)
 		writeStatus(w, err)
 		return
 	}
 	body, err := readPayload(r, s.payload)
 	if err != nil {
+		batch.NoteFailure(s.runner, dir.Name, chosen.Version, err)
 		s.logInfer(name, logged, started, err)
 		writeStatus(w, err)
 		return
 	}
 	header, err := inferenceHeaderLength(r)
 	if err != nil {
+		batch.NoteFailure(s.runner, dir.Name, chosen.Version, err)
 		s.logInfer(name, logged, started, err)
 		writeStatus(w, err)
 		return
 	}
 	req, err := batch.DecodeHTTP(chosen.Signature, body, header)
 	if err != nil {
+		batch.NoteFailure(s.runner, dir.Name, chosen.Version, err)
 		s.logInfer(name, logged, started, err)
 		writeStatus(w, err)
 		return

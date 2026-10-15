@@ -271,6 +271,9 @@ type rigOptions struct {
 	delay    time.Duration
 	capacity int
 	held     bool
+	recorder Recorder
+	model    string
+	version  string
 }
 
 func newRig(t *testing.T, o rigOptions) *rig {
@@ -279,8 +282,12 @@ func newRig(t *testing.T, o rigOptions) *rig {
 		o.capacity = 8
 	}
 	r := &rig{slot: newFakeSlot(o.held), clock: newFakeClock(), pool: newRecordingPool(t), gate: &gate{}}
+	model, version := o.model, o.version
+	if model == "" {
+		model, version = "m", "1"
+	}
 	b, err := New(Config{
-		Key:          Key{Model: "m", Version: "1"},
+		Key:          Key{Model: model, Version: version},
 		MaxBatchSize: o.maxBatch,
 		Delay:        o.delay,
 		Capacity:     o.capacity,
@@ -288,6 +295,7 @@ func newRig(t *testing.T, o rigOptions) *rig {
 		Pool:         r.pool,
 		Clock:        r.clock,
 		Slot:         r.slot.run,
+		Recorder:     o.recorder,
 	})
 	if err != nil {
 		t.Fatalf("new batcher: %v", err)

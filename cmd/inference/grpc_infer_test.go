@@ -43,7 +43,7 @@ func TestGRPCInferAddModel(t *testing.T) {
 		InterOpThreads:  1,
 		LogLevel:        "error",
 	}
-	rt := startModels(cfg, newLogger(io.Discard, "error"))
+	rt := startModels(cfg, newLogger(io.Discard, "error"), nil)
 	t.Cleanup(func() {
 		if rt.watcher != nil {
 			_ = rt.watcher.Close()

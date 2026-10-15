@@ -55,7 +55,7 @@ func TestRuntimeModelBecomesReady(t *testing.T) {
 	assertGRPCAddInfer(t, ports.grpc)
 	assertGET(t, ports.http, "/v2/health/live", http.StatusOK)
 	assertGET(t, ports.http, "/v2/health/ready", http.StatusOK)
-	assertRefused(t, hostPort(ports.metrics))
+	assertMetricsOpen(t, ports.metrics)
 	// Both NATS variables are set, so the process dials even when the credentials file is missing.
 	// That retry leaves live and ready on the model.
 	deadline := time.Now().Add(5 * time.Second)
@@ -85,7 +85,7 @@ func TestRuntimeNotReady(t *testing.T) {
 		}))
 		t.Cleanup(proc.kill)
 		assertLiveNotReady(t, ports)
-		assertRefused(t, hostPort(ports.metrics))
+		assertMetricsOpen(t, ports.metrics)
 		stopProcess(t, proc)
 	})
 
@@ -120,7 +120,7 @@ func TestRuntimeReadyBesideUnavailable(t *testing.T) {
 
 	waitStatus(t, ports.http, "/v2/health/live", http.StatusOK, 20*time.Second)
 	waitStatus(t, ports.http, "/v2/health/ready", http.StatusOK, 20*time.Second)
-	assertRefused(t, hostPort(ports.metrics))
+	assertMetricsOpen(t, ports.metrics)
 	stopProcess(t, proc)
 }
 
@@ -152,7 +152,7 @@ func TestRuntimeMissingLibraryStaysUp(t *testing.T) {
 	if strings.TrimSpace(proc.stderr.String()) != "" {
 		t.Fatalf("stderr %s", proc.stderr.String())
 	}
-	assertRefused(t, hostPort(ports.metrics))
+	assertMetricsOpen(t, ports.metrics)
 	stopProcess(t, proc)
 }
 

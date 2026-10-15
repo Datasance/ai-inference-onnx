@@ -148,7 +148,7 @@ func TestTLSDisabledServesPlain(t *testing.T) {
 	assertGRPCHealth(t, ports.grpc, false)
 	assertNotTLS(t, ports.http)
 	assertNotTLS(t, ports.grpc)
-	assertRefused(t, hostPort(ports.metrics))
+	assertMetricsOpen(t, ports.metrics)
 }
 
 func TestTLSServesOneCertificate(t *testing.T) {
@@ -177,7 +177,7 @@ func TestTLSServesOneCertificate(t *testing.T) {
 	}
 	assertPlainLiveFails(t, ports.http)
 	assertInsecureGRPCFails(t, ports.grpc)
-	assertRefused(t, hostPort(ports.metrics))
+	assertMetricsOpen(t, ports.metrics)
 	out := stdout + proc.stderr.String()
 	assertNoKey(t, out, server)
 	if strings.Contains(out, tlsToken) {
@@ -224,7 +224,7 @@ func TestTLSRequiresClientCertificate(t *testing.T) {
 	if _, err := grpcLiveErr(ports.grpc, server.cert, &other, false); err == nil {
 		t.Fatal("grpc accepted a certificate from another authority")
 	}
-	assertRefused(t, hostPort(ports.metrics))
+	assertMetricsOpen(t, ports.metrics)
 	out := proc.stdout.String() + proc.stderr.String()
 	assertNoKey(t, out, server, ca, otherCA, client, other)
 }
