@@ -443,13 +443,13 @@ func appendJSONValue(out []byte, d Datatype, tok json.Token) ([]byte, error) {
 		return out, errors.New("integer does not fit " + string(d))
 	default:
 	}
-	return appendUint(out, uint64(n), d.ElementSize()), nil
+	return appendUint(out, uint64(n), d.ElementSize()), nil // #nosec G115 -- range checked above; two's-complement bits of the value
 }
 
 // appendUint appends the low size bytes of v in little-endian order.
 func appendUint(out []byte, v uint64, size int) []byte {
 	for i := range size {
-		out = append(out, byte(v>>(8*i)))
+		out = append(out, byte(v>>(8*i))) // #nosec G115 -- keeps one byte of v on purpose
 	}
 	return out
 }

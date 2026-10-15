@@ -1988,7 +1988,7 @@ var (
 
 func file_open_inference_grpc_proto_rawDescGZIP() []byte {
 	file_open_inference_grpc_proto_rawDescOnce.Do(func() {
-		file_open_inference_grpc_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_open_inference_grpc_proto_rawDesc), len(file_open_inference_grpc_proto_rawDesc)))
+		file_open_inference_grpc_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_open_inference_grpc_proto_rawDesc), len(file_open_inference_grpc_proto_rawDesc))) // #nosec G103 -- generated descriptor
 	})
 	return file_open_inference_grpc_proto_rawDescData
 }
@@ -2101,7 +2101,7 @@ func file_open_inference_grpc_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_open_inference_grpc_proto_rawDesc), len(file_open_inference_grpc_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_open_inference_grpc_proto_rawDesc), len(file_open_inference_grpc_proto_rawDesc)), // #nosec G103 -- generated descriptor
 			NumEnums:      0,
 			NumMessages:   34,
 			NumExtensions: 0,

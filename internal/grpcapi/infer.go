@@ -559,7 +559,7 @@ func packContents(d batch.Datatype, c *openinference.InferTensorContents) ([]byt
 	case batch.TypeInt64:
 		out := make([]byte, 8*len(c.GetInt64Contents()))
 		for i, value := range c.GetInt64Contents() {
-			binary.LittleEndian.PutUint64(out[i*8:], uint64(value))
+			binary.LittleEndian.PutUint64(out[i*8:], uint64(value)) // #nosec G115 -- two's-complement bits of an INT64
 		}
 		return out, nil
 	case batch.TypeUint8, batch.TypeUint16, batch.TypeUint32:
@@ -590,7 +590,7 @@ func packContents(d batch.Datatype, c *openinference.InferTensorContents) ([]byt
 				return nil, &batch.InvalidError{Reason: "BYTES element is too long"}
 			}
 			var prefix [4]byte
-			binary.LittleEndian.PutUint32(prefix[:], uint32(len(value)))
+			binary.LittleEndian.PutUint32(prefix[:], uint32(len(value))) // #nosec G115 -- length is checked against MaxUint32 above
 			out = append(out, prefix[:]...)
 			out = append(out, value...)
 		}
@@ -609,14 +609,14 @@ func packSigned(d batch.Datatype, values []int32) ([]byte, error) {
 			if value < math.MinInt8 || value > math.MaxInt8 {
 				return nil, &batch.InvalidError{Reason: "integer does not fit INT8"}
 			}
-			out[i] = byte(int8(value))
+			out[i] = byte(int8(value)) // #nosec G115 -- range checked above; two's-complement bits of an INT8
 		case batch.TypeInt16:
 			if value < math.MinInt16 || value > math.MaxInt16 {
 				return nil, &batch.InvalidError{Reason: "integer does not fit INT16"}
 			}
-			binary.LittleEndian.PutUint16(out[i*2:], uint16(int16(value)))
+			binary.LittleEndian.PutUint16(out[i*2:], uint16(int16(value))) // #nosec G115 -- range checked above; two's-complement bits of an INT16
 		default:
-			binary.LittleEndian.PutUint32(out[i*4:], uint32(value))
+			binary.LittleEndian.PutUint32(out[i*4:], uint32(value)) // #nosec G115 -- two's-complement bits of an INT32
 		}
 	}
 	return out, nil
@@ -656,25 +656,25 @@ func contentsMessage(d batch.Datatype, data []byte) (*openinference.InferTensorC
 	case batch.TypeInt8:
 		out := make([]int32, len(data))
 		for i, value := range data {
-			out[i] = int32(int8(value))
+			out[i] = int32(int8(value)) // #nosec G115 -- stored two's-complement bits of an INT8
 		}
 		return &openinference.InferTensorContents{IntContents: out}, nil
 	case batch.TypeInt16:
 		out := make([]int32, len(data)/2)
 		for i := range out {
-			out[i] = int32(int16(le.Uint16(data[i*2:])))
+			out[i] = int32(int16(le.Uint16(data[i*2:]))) // #nosec G115 -- stored two's-complement bits of an INT16
 		}
 		return &openinference.InferTensorContents{IntContents: out}, nil
 	case batch.TypeInt32:
 		out := make([]int32, len(data)/4)
 		for i := range out {
-			out[i] = int32(le.Uint32(data[i*4:]))
+			out[i] = int32(le.Uint32(data[i*4:])) // #nosec G115 -- stored two's-complement bits of an INT32
 		}
 		return &openinference.InferTensorContents{IntContents: out}, nil
 	case batch.TypeInt64:
 		out := make([]int64, len(data)/8)
 		for i := range out {
-			out[i] = int64(le.Uint64(data[i*8:]))
+			out[i] = int64(le.Uint64(data[i*8:])) // #nosec G115 -- stored two's-complement bits of an INT64
 		}
 		return &openinference.InferTensorContents{Int64Contents: out}, nil
 	case batch.TypeUint8:

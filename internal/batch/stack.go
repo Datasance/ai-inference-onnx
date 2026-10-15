@@ -52,10 +52,10 @@ func splitBytesRows(out Tensor, rows []int64, total int64, parts [][]byte) ([][]
 			}
 			n := uint64(binary.LittleEndian.Uint32(data[offset:]))
 			offset += bytesLengthSize
-			if n > uint64(len(data)-offset) {
+			if n > uint64(len(data)-offset) { // #nosec G115 -- offset never passes len(data), so the difference is not negative
 				return nil, fmt.Errorf("output %q BYTES element overruns the data", out.Name)
 			}
-			offset += int(n)
+			offset += int(n) // #nosec G115 -- n is at most the bytes left in data
 		}
 		parts[i] = data[start:offset:offset]
 	}

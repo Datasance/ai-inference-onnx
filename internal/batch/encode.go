@@ -151,11 +151,11 @@ func jsonValues(d Datatype, data []byte) any {
 		b := data[size*i:]
 		switch d {
 		case TypeInt8:
-			out[i] = int64(int8(b[0]))
+			out[i] = int64(int8(b[0])) // #nosec G115 -- stored two's-complement bits of an INT8
 		case TypeInt16:
-			out[i] = int64(int16(le.Uint16(b)))
+			out[i] = int64(int16(le.Uint16(b))) // #nosec G115 -- stored two's-complement bits of an INT16
 		case TypeInt32:
-			out[i] = int64(int32(le.Uint32(b)))
+			out[i] = int64(int32(le.Uint32(b))) // #nosec G115 -- stored two's-complement bits of an INT32
 		case TypeUint8:
 			out[i] = int64(b[0])
 		case TypeUint16:
