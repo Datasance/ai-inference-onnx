@@ -167,7 +167,7 @@ func TestModelInferAuth(t *testing.T) {
 		checker := mustChecker(t, config.Config{AuthMode: config.AuthStatic, AuthStaticToken: staticToken}, "")
 		client := start(t, checker, func() bool { return true })
 		_, err := client.ModelInfer(withAuth(callCtx(t), "Bearer "+staticToken), req)
-		assertStatus(t, err, codes.Unimplemented, "", staticToken)
+		assertStatus(t, err, codes.NotFound, `model "demo" was not found`, staticToken)
 	})
 
 	t.Run("edgelet missing token", func(t *testing.T) {
@@ -189,8 +189,12 @@ func TestModelInferAuth(t *testing.T) {
 
 func start(t *testing.T, checker *auth.Checker, ready func() bool) openinference.GRPCInferenceServiceClient {
 	t.Helper()
+	return dialServer(t, New(checker, ready))
+}
+
+func dialServer(t *testing.T, srv *Server) openinference.GRPCInferenceServiceClient {
+	t.Helper()
 	lis := bufconn.Listen(1 << 20)
-	srv := New(checker, ready)
 	go func() {
 		_ = srv.Serve(lis)
 	}()

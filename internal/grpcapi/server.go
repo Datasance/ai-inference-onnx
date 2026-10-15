@@ -1,13 +1,17 @@
 // Package grpcapi serves inference over HTTP/2.
 // Without a certificate the server accepts cleartext. With a certificate it requires TLS.
 // Live and ready stay open. Every other call is checked before it runs.
+// Metadata, model ready, the repository index, and infer read the model directories.
+// Loading and unloading a model is not supported.
 package grpcapi
 
 import (
 	"context"
 	"crypto/tls"
+	"log/slog"
 	"net"
 	"strconv"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -32,13 +36,21 @@ func ListenAddr(port int) string {
 }
 
 // Server answers live and ready checks.
-// Other calls are rejected after the credential check, until a handler exists.
+// It also serves server metadata, model metadata, model ready, the repository index, and infer.
+// Load and unload report that this server does not load or unload models.
 type Server struct {
 	openinference.UnimplementedGRPCInferenceServiceServer
 
-	checker *auth.Checker
-	ready   func() bool
-	rpc     *grpc.Server
+	checker   *auth.Checker
+	ready     func() bool
+	catalog   Catalog
+	runner    Runner
+	payload   int
+	logger    *slog.Logger
+	tlsConfig *tls.Config
+
+	once sync.Once
+	rpc  *grpc.Server
 }
 
 // New returns a server that uses checker for protected calls.
@@ -56,29 +68,39 @@ func NewTLS(checker *auth.Checker, ready func() bool, tlsConfig *tls.Config) *Se
 }
 
 func newServer(checker *auth.Checker, ready func() bool, tlsConfig *tls.Config) *Server {
-	s := &Server{checker: checker, ready: ready}
-	opts := []grpc.ServerOption{grpc.UnaryInterceptor(s.intercept)}
-	if tlsConfig != nil {
-		opts = append([]grpc.ServerOption{grpc.Creds(credentials.NewTLS(tlsConfig.Clone()))}, opts...)
-	}
-	s.rpc = grpc.NewServer(opts...)
-	openinference.RegisterGRPCInferenceServiceServer(s.rpc, s)
-	return s
+	return &Server{checker: checker, ready: ready, tlsConfig: tlsConfig}
 }
 
 // Serve accepts connections on lis until Stop or GracefulStop.
 func (s *Server) Serve(lis net.Listener) error {
-	return s.rpc.Serve(lis)
+	return s.server().Serve(lis)
 }
 
 // GracefulStop stops new calls and waits for active calls to finish.
 func (s *Server) GracefulStop() {
-	s.rpc.GracefulStop()
+	s.server().GracefulStop()
 }
 
 // Stop stops the server at once.
 func (s *Server) Stop() {
-	s.rpc.Stop()
+	s.server().Stop()
+}
+
+// server builds the gRPC server on the first call.
+// RegisterInfer must run before this so the receive and send limits match the payload ceiling.
+func (s *Server) server() *grpc.Server {
+	s.once.Do(func() {
+		opts := []grpc.ServerOption{grpc.UnaryInterceptor(s.intercept)}
+		if s.tlsConfig != nil {
+			opts = append([]grpc.ServerOption{grpc.Creds(credentials.NewTLS(s.tlsConfig.Clone()))}, opts...)
+		}
+		if s.payload > 0 {
+			opts = append(opts, grpc.MaxRecvMsgSize(s.payload), grpc.MaxSendMsgSize(s.payload))
+		}
+		s.rpc = grpc.NewServer(opts...)
+		openinference.RegisterGRPCInferenceServiceServer(s.rpc, s)
+	})
+	return s.rpc
 }
 
 // ServerLive reports that this process can answer.
