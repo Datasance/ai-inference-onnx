@@ -1,6 +1,8 @@
 // Command inference loads server settings and serves HTTP and gRPC.
 // HTTP serves health checks, server metadata, the model list, model metadata, model ready, the repository index, and infer.
 // gRPC serves health checks, server metadata, model metadata, model ready, the repository index, and infer.
+// When both the NATS server URL and the credentials path are set, the same calls are also served on NATS.
+// A NATS server that cannot be reached is retried in the background and does not stop the process.
 // Invalid settings or an unusable Edgelet signing key stop the process before it listens.
 // When the runtime library is available, model sessions start from the model and knowledge directories.
 // A signal stops listeners, closes those sessions, and then releases the runtime.
@@ -94,6 +96,15 @@ func run() int {
 	logger.Info("http listener is up", "addr", httpLn.Addr().String())
 	logger.Info("grpc listener is up", "addr", grpcLn.Addr().String())
 
+	natsCtx, cancelNATS := context.WithCancel(context.Background())
+	defer cancelNATS()
+	bus := startNATS(natsCtx, cfg, models, logger)
+	stopAll := func() int {
+		cancelNATS()
+		bus.Close()
+		return finish(logger, httpServer, grpcServer, models)
+	}
+
 	errCh := make(chan error, 2)
 	go func() {
 		errCh <- serveHTTP(httpServer, httpLn, tlsConfig)
@@ -108,9 +119,9 @@ func run() int {
 
 	select {
 	case <-signals:
-		return finish(logger, httpServer, grpcServer, models)
+		return stopAll()
 	case err := <-errCh:
-		code := finish(logger, httpServer, grpcServer, models)
+		code := stopAll()
 		if err != nil {
 			logger.Error(fmt.Sprintf("serve: %v", err))
 			return 1

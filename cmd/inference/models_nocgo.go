@@ -42,6 +42,11 @@ func (m *modelRuntime) Run(_ context.Context, name, _ string, _ *batch.Request) 
 	return nil, batch.NotFound(fmt.Sprintf("model %q was not found", name))
 }
 
+// buffers is nil. This build has no session buffer pool.
+func (m *modelRuntime) buffers() batch.Pool {
+	return nil
+}
+
 // shutdown releases nothing.
 func (m *modelRuntime) shutdown() error {
 	return nil

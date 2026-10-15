@@ -56,10 +56,17 @@ func TestRuntimeModelBecomesReady(t *testing.T) {
 	assertGET(t, ports.http, "/v2/health/live", http.StatusOK)
 	assertGET(t, ports.http, "/v2/health/ready", http.StatusOK)
 	assertRefused(t, hostPort(ports.metrics))
-	time.Sleep(200 * time.Millisecond)
-	if dials.Load() != 0 {
-		t.Fatalf("nats accepted %d connections", dials.Load())
+	// Both NATS variables are set, so the process dials even when the credentials file is missing.
+	// That retry leaves live and ready on the model.
+	deadline := time.Now().Add(5 * time.Second)
+	for dials.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
 	}
+	if dials.Load() == 0 {
+		t.Fatal("nats did not dial while the server URL and credentials path were set")
+	}
+	assertGET(t, ports.http, "/v2/health/live", http.StatusOK)
+	assertGET(t, ports.http, "/v2/health/ready", http.StatusOK)
 	stopProcess(t, proc)
 }
 
@@ -160,13 +167,27 @@ func TestCgoDependenciesIncludeRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go list: %v\n%s", err, out)
 	}
-	if !strings.Contains(string(out), "github.com/microsoft/onnxruntime/go/onnxruntime") {
+	var runtime, client bool
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		switch line {
+		case "github.com/microsoft/onnxruntime/go/onnxruntime":
+			runtime = true
+		case "github.com/nats-io/nats.go":
+			client = true
+		}
+		if strings.HasPrefix(line, "github.com/nats-io/nats-server") {
+			t.Errorf("the process links the NATS server %s", line)
+		}
+		if strings.Contains(line, "ai-inference-onnx/dashboard") {
+			t.Errorf("the process links the dashboard module %s", line)
+		}
+	}
+	if !runtime {
 		t.Fatalf("runtime module missing:\n%s", out)
 	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.Contains(strings.ToLower(line), "nats") {
-			t.Errorf("unexpected dependency %s", line)
-		}
+	if !client {
+		t.Error("the process does not link github.com/nats-io/nats.go")
 	}
 }
 

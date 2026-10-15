@@ -241,6 +241,14 @@ func runError(err error) error {
 	return err
 }
 
+// buffers is the session buffer pool, or nil when no models directory was opened.
+func (m *modelRuntime) buffers() batch.Pool {
+	if m == nil || m.queues.pool == nil {
+		return nil
+	}
+	return m.queues.pool
+}
+
 // bufferPool adapts the session buffer pool to the batcher.
 type bufferPool struct {
 	pool *session.Pool

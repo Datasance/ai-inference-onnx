@@ -183,22 +183,7 @@ func TestStaticTokenAbsentFromLiveLog(t *testing.T) {
 	}
 }
 
-func TestNATSSettingsStillServeLive(t *testing.T) {
-	t.Parallel()
-	ports := pickPorts(t)
-	proc := startProcess(t, processEnv(t, ports, map[string]string{
-		"AUTH_MODE":       "disabled",
-		"NATS_SERVER_URL": "nats://127.0.0.1:1",
-		"NATS_CREDS_PATH": filepath.Join(t.TempDir(), "missing.creds"),
-	}))
-	t.Cleanup(proc.kill)
-
-	waitLive(t, ports.http)
-	assertGET(t, ports.http, "/v2/health/live", http.StatusOK)
-	assertRefused(t, hostPort(ports.metrics))
-}
-
-func TestDependenciesExcludeNATSAndRuntime(t *testing.T) {
+func TestDependenciesIncludeNATSExcludeRuntime(t *testing.T) {
 	t.Parallel()
 	cmd := exec.Command("go", "list", "-deps", "./cmd/inference")
 	cmd.Dir = moduleRoot(t)
@@ -207,15 +192,21 @@ func TestDependenciesExcludeNATSAndRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go list: %v\n%s", err, out)
 	}
+	var client bool
 	for _, line := range strings.Split(string(out), "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
+		if line == "github.com/nats-io/nats.go" {
+			client = true
 		}
-		lower := strings.ToLower(line)
-		if strings.Contains(lower, "nats") || strings.Contains(lower, "onnxruntime") {
+		if strings.Contains(strings.ToLower(line), "onnxruntime") {
 			t.Errorf("unexpected dependency %s", line)
 		}
+		if strings.HasPrefix(line, "github.com/nats-io/nats-server") {
+			t.Errorf("the process links the NATS server %s", line)
+		}
+	}
+	if !client {
+		t.Error("the process does not link github.com/nats-io/nats.go")
 	}
 }
 

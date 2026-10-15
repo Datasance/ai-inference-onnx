@@ -19,7 +19,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -159,21 +158,19 @@ func TestTLSServesOneCertificate(t *testing.T) {
 	ports := pickPorts(t)
 	server := mintCert(t, nil, certKindServer)
 	certPath, keyPath := writePair(t, server)
-	natsAddr, natsDialed := watchUnusedPort(t)
-
 	proc := startProcess(t, processEnv(t, ports, map[string]string{
 		"AUTH_MODE":         "static",
 		"AUTH_STATIC_TOKEN": tlsToken,
 		"TLS_ENABLED":       "true",
 		"TLS_CERT":          certPath,
 		"TLS_KEY":           keyPath,
-		"NATS_SERVER_URL":   "nats://" + natsAddr,
+		"NATS_SERVER_URL":   "nats://" + refusedAddress(t),
 		"NATS_CREDS_PATH":   filepath.Join(t.TempDir(), "missing.creds"),
 	}))
 	t.Cleanup(proc.kill)
 
 	httpPeer := waitHTTPS(t, ports.http, server.cert, nil, true)
-	stdout := waitLog(t, proc, "grpc listener is up")
+	stdout := waitLog(t, proc, "nats connection attempt failed, retrying")
 	grpcPeer := grpcLive(t, ports.grpc, server.cert, nil, true)
 	if !bytes.Equal(httpPeer, grpcPeer) || !bytes.Equal(httpPeer, server.cert.Raw) {
 		t.Fatal("peer certificate mismatch")
@@ -181,9 +178,6 @@ func TestTLSServesOneCertificate(t *testing.T) {
 	assertPlainLiveFails(t, ports.http)
 	assertInsecureGRPCFails(t, ports.grpc)
 	assertRefused(t, hostPort(ports.metrics))
-	if natsDialed() {
-		t.Fatal("nats accepted a connection")
-	}
 	out := stdout + proc.stderr.String()
 	assertNoKey(t, out, server)
 	if strings.Contains(out, tlsToken) {
@@ -384,25 +378,6 @@ func writePEM(t *testing.T, name string, body []byte) string {
 		t.Fatalf("write %s: %v", name, err)
 	}
 	return path
-}
-
-func watchUnusedPort(t *testing.T) (string, func() bool) {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	var dialed atomic.Bool
-	go func() {
-		conn, acceptErr := ln.Accept()
-		if acceptErr != nil {
-			return
-		}
-		_ = conn.Close()
-		dialed.Store(true)
-	}()
-	t.Cleanup(func() { _ = ln.Close() })
-	return ln.Addr().String(), dialed.Load
 }
 
 func assertStartupError(t *testing.T, proc *running) {
