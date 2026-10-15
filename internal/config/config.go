@@ -350,7 +350,7 @@ func validateTLS(cfg Config) error {
 }
 
 func readableFile(path string) error {
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- paths are configured, not taken from a request
 	if err != nil {
 		return err
 	}
