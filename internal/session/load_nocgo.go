@@ -42,6 +42,11 @@ func (r *Repository) Models() []Model {
 	return nil
 }
 
+// Catalog returns no directories.
+func (r *Repository) Catalog() []CatalogModel {
+	return nil
+}
+
 // Release does nothing.
 func (r *Repository) Release(out Output) {}
 

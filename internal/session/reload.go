@@ -145,6 +145,7 @@ func (r *Repository) reload(cfg Config, item *loadedModel, discovered discover.M
 	r.mu.Lock()
 	item.state = Loading
 	item.reason = reasonLoading
+	item.selected = selectedNames(discovered)
 	old := slices.Clone(item.versions)
 	r.mu.Unlock()
 	r.note(item.name, Loading)
@@ -205,6 +206,7 @@ func (r *Repository) reload(cfg Config, item *loadedModel, discovered discover.M
 	item.state = Ready
 	item.reason = ""
 	item.queueDelay = queueDelayOf(discovered.MaxQueueDelayMicroseconds)
+	item.queueDelaySet = discovered.MaxQueueDelayMicroseconds != nil
 	item.epoch++
 	item.opens += uint64(len(opened))
 	r.mu.Unlock()

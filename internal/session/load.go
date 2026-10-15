@@ -54,17 +54,21 @@ type Repository struct {
 }
 
 type loadedModel struct {
-	name       string
-	state      State
-	reason     string
-	queueDelay uint64
-	versions   []*versionSession
-	epoch      uint64
-	opens      uint64
-	id         modelID
-	haveID     bool
-	live       map[string]int
-	high       map[string]int
+	name          string
+	state         State
+	reason        string
+	queueDelay    uint64
+	queueDelaySet bool
+	versions      []*versionSession
+	// selected is the version names this directory resolved to.
+	// It stays set while a session is opening and after a load fails.
+	selected []string
+	epoch    uint64
+	opens    uint64
+	id       modelID
+	haveID   bool
+	live     map[string]int
+	high     map[string]int
 }
 
 type versionSession struct {
@@ -125,6 +129,7 @@ func (r *Repository) loadOne(cfg Config, discovered discover.Model) {
 	id := identify(cfg, discovered)
 	if !id.loadable {
 		item := unavailableModel(discovered.Name, id.reason)
+		item.selected = selectedNames(discovered)
 		item.id = id
 		item.haveID = true
 		r.add(item)
@@ -132,10 +137,12 @@ func (r *Repository) loadOne(cfg Config, discovered discover.Model) {
 		return
 	}
 	item := &loadedModel{
-		name:       discovered.Name,
-		state:      Loading,
-		reason:     reasonLoading,
-		queueDelay: queueDelayOf(discovered.MaxQueueDelayMicroseconds),
+		name:          discovered.Name,
+		state:         Loading,
+		reason:        reasonLoading,
+		queueDelay:    queueDelayOf(discovered.MaxQueueDelayMicroseconds),
+		queueDelaySet: discovered.MaxQueueDelayMicroseconds != nil,
+		selected:      selectedNames(discovered),
 	}
 	r.add(item)
 	r.note(discovered.Name, Loading)

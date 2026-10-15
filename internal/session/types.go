@@ -93,6 +93,48 @@ type Model struct {
 	Versions []Version
 }
 
+// CatalogModel is one model directory as metadata and the repository index see it.
+// Versions are the ones the directory resolved to, including while a session is opening
+// and after a load fails. The signature is set when a session for that version is open.
+type CatalogModel struct {
+	// Name is the directory name.
+	Name string
+	// State is ready, loading, or unavailable.
+	State State
+	// Reason is empty when State is ready.
+	Reason string
+	// QueueDelayMicroseconds is the queue delay from the model file when the file sets one.
+	QueueDelayMicroseconds uint64
+	// QueueDelaySet reports whether the model file set a queue delay.
+	// When it is false, the server's default delay applies.
+	QueueDelaySet bool
+	// Versions are in the order the server uses when a caller omits the version.
+	// The first version is the one that serves.
+	Versions []CatalogVersion
+}
+
+// CatalogVersion is one selected version of a model directory.
+type CatalogVersion struct {
+	// Version is the decimal version. A directory with no version subdirectories is "1".
+	Version string
+	// Inputs are the model inputs in model order. Empty when no session is open.
+	Inputs []CatalogTensor
+	// Outputs are the model outputs in model order. Empty when no session is open.
+	Outputs []CatalogTensor
+	// MaxBatchSize is the recorded batch cap. Zero means requests are not stacked.
+	MaxBatchSize int
+}
+
+// CatalogTensor is one input or output in a model signature.
+type CatalogTensor struct {
+	// Name is the tensor name in the model.
+	Name string
+	// Datatype is the tensor element type name used in model metadata.
+	Datatype string
+	// Shape is the tensor shape. A negative length is reported as -1.
+	Shape []int64
+}
+
 // Version is one selected model version.
 type Version struct {
 	// Version is the decimal version. A directory with no version subdirectories is "1".
