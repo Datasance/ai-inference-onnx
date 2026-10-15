@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/eclipse-iofog/ai-inference-onnx/internal/batch"
 	"github.com/eclipse-iofog/ai-inference-onnx/internal/config"
 	"github.com/eclipse-iofog/ai-inference-onnx/internal/httpapi"
+	"github.com/eclipse-iofog/ai-inference-onnx/internal/metrics"
 	"github.com/eclipse-iofog/ai-inference-onnx/internal/ort"
 	"github.com/eclipse-iofog/ai-inference-onnx/internal/session"
 )
@@ -28,6 +30,9 @@ type modelRuntime struct {
 	watcher *session.Watcher
 	started bool
 	queues  inferQueues
+
+	mu    sync.Mutex
+	notes chan<- []metrics.ModelState
 }
 
 // startModels loads the shared library, opens one session per ready model version,
@@ -35,13 +40,14 @@ type modelRuntime struct {
 // Thread counts come from server settings. Each session requests the CPU provider.
 // A library that cannot be loaded, or a models directory that cannot be read, leaves the set empty.
 // The process still answers, and ready stays false until a model can serve.
-func startModels(cfg config.Config, logger *slog.Logger) *modelRuntime {
+// notes receives a copy of the model list after the load and after each later state change.
+func startModels(cfg config.Config, logger *slog.Logger, notes chan<- []metrics.ModelState) *modelRuntime {
 	if err := ort.Init(); err != nil {
 		logger.Error(fmt.Sprintf("runtime: %v", err))
 		return &modelRuntime{}
 	}
 	running := &modelRuntime{started: true}
-	repo, pool, err := openRepository(cfg, logger)
+	repo, pool, err := openRepository(cfg, logger, running)
 	if err != nil {
 		logger.Error(fmt.Sprintf("models: %v", err))
 		return running
@@ -54,6 +60,8 @@ func startModels(cfg config.Config, logger *slog.Logger) *modelRuntime {
 	running.queues.slot = running.slot
 	running.queues.admit = running.admit
 	running.queues.settings = running.batchSettings
+	running.forwardEnable(notes)
+	running.emit(notes)
 	watcher, err := watchRepository(cfg, repo)
 	if err != nil {
 		logger.Error(fmt.Sprintf("watch: %v", err))
@@ -63,20 +71,81 @@ func startModels(cfg config.Config, logger *slog.Logger) *modelRuntime {
 	return running
 }
 
-func openRepository(cfg config.Config, logger *slog.Logger) (*session.Repository, *session.Pool, error) {
+func openRepository(cfg config.Config, logger *slog.Logger, running *modelRuntime) (*session.Repository, *session.Pool, error) {
 	pool, err := session.NewPool(cfg.MaxPayloadBytes)
 	if err != nil {
 		return nil, nil, err
 	}
 	sessCfg := sessionConfig(cfg)
-	sessCfg.OnState = func(name string, state session.State) {
+	sessCfg.OnState = func(name string, state session.State, models []session.CatalogModel) {
 		logModelState(logger, name, state)
+		running.forward(models)
 	}
 	repo, err := session.Load(sessCfg, pool)
 	if err != nil {
 		return nil, nil, err
 	}
 	return repo, pool, nil
+}
+
+func (m *modelRuntime) forwardEnable(notes chan<- []metrics.ModelState) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.notes = notes
+	m.mu.Unlock()
+}
+
+// emit sends the current model list. It does not run from the state callback.
+func (m *modelRuntime) emit(notes chan<- []metrics.ModelState) {
+	if m == nil || m.repo == nil || notes == nil {
+		return
+	}
+	select {
+	case notes <- modelStatesFrom(m.repo.Catalog()):
+	default:
+	}
+}
+
+// forward sends the copy the loader already took. It does not read the repository again.
+func (m *modelRuntime) forward(models []session.CatalogModel) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	notes := m.notes
+	m.mu.Unlock()
+	if notes == nil {
+		return
+	}
+	select {
+	case notes <- modelStatesFrom(models):
+	default:
+	}
+}
+
+// modelStates returns a copy of the loaded model list.
+func (m *modelRuntime) modelStates() []metrics.ModelState {
+	if m == nil || m.repo == nil {
+		return []metrics.ModelState{}
+	}
+	return modelStatesFrom(m.repo.Catalog())
+}
+
+func modelStatesFrom(models []session.CatalogModel) []metrics.ModelState {
+	out := make([]metrics.ModelState, 0)
+	for _, model := range models {
+		for _, version := range model.Versions {
+			out = append(out, metrics.ModelState{
+				Model:   model.Name,
+				Version: version.Version,
+				State:   metrics.State(model.State),
+				Reason:  model.Reason,
+			})
+		}
+	}
+	return out
 }
 
 func watchRepository(cfg config.Config, repo *session.Repository) (*session.Watcher, error) {
@@ -157,6 +226,24 @@ func tensorSpecs(tensors []session.CatalogTensor) []batch.TensorSpec {
 		}
 	}
 	return out
+}
+
+// useRegistry counts finished requests on reg.
+// Nil leaves the queues uncounted.
+func (m *modelRuntime) useRegistry(reg *metrics.Registry) {
+	if m == nil || reg == nil {
+		return
+	}
+	m.queues.recorder = reg
+}
+
+// ReportFailure counts a request that failed before the queue accepted it.
+// A missing model is not counted.
+func (m *modelRuntime) ReportFailure(model, version string, err error) {
+	if m == nil {
+		return
+	}
+	batch.RecordRefusal(m.queues.recorder, model, version, err)
 }
 
 // Run submits one decoded request to the queue of the named version.

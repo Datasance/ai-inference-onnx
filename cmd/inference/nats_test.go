@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -85,7 +86,7 @@ func TestNATSRefusedDialKeepsServing(t *testing.T) {
 	assertGET(t, ports.http, "/v2/health/live", http.StatusOK)
 	assertGET(t, ports.http, "/v2/health/ready", http.StatusBadRequest)
 	assertGRPCHealth(t, ports.grpc, false)
-	assertRefused(t, hostPort(ports.metrics))
+	assertMetricsOpen(t, ports.metrics)
 
 	var up, retries int
 	for _, line := range decodeLog(t, stdout) {
@@ -129,25 +130,35 @@ func TestNATSRefusedDialKeepsServing(t *testing.T) {
 
 func TestNATSServesEmptyModelSet(t *testing.T) {
 	t.Parallel()
-	url := startNATSServer(t)
+	srv := startNATSServer(t)
+	url := srv.ClientURL()
 	path, _, _ := writeProcessCredentials(t)
 	ports := pickPorts(t)
 	proc := startProcess(t, processEnv(t, ports, map[string]string{
-		"AUTH_MODE":       "disabled",
-		"NATS_SERVER_URL": url,
-		"NATS_CREDS_PATH": path,
+		"AUTH_MODE":        "disabled",
+		"NATS_SERVER_URL":  url,
+		"NATS_CREDS_PATH":  path,
+		"ENGINE_SERVER_ID": "engine-1",
+		"METRICS_INTERVAL": "100ms",
 	}))
 	t.Cleanup(proc.kill)
 	waitLive(t, ports.http)
 	waitLog(t, proc, "nats connected")
+	waitClients(t, srv, 1)
 
 	nc, err := nats.Connect(url, nats.NoReconnect())
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(nc.Close)
-	snapshots, err := nc.SubscribeSync("inference.metrics.>")
+	if got := srv.NumClients(); got != 2 {
+		t.Fatalf("clients %d", got)
+	}
+	snapshots, err := nc.SubscribeSync("inference.metrics.engines.>")
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := nc.Flush(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -170,10 +181,65 @@ func TestNATSServesEmptyModelSet(t *testing.T) {
 	if status != http.StatusNotImplemented {
 		t.Fatalf("load %d %s", status, body)
 	}
-	assertRefused(t, hostPort(ports.metrics))
-	if msg, err := snapshots.NextMsg(300 * time.Millisecond); !errors.Is(err, nats.ErrTimeout) {
-		t.Fatalf("a snapshot was published: %v %v", msg, err)
+	assertMetricsOpen(t, ports.metrics)
+	msg, err := snapshots.NextMsg(2 * time.Second)
+	if err != nil {
+		t.Fatal(err)
 	}
+	if got := srv.NumClients(); got != 2 {
+		t.Fatalf("publish opened another connection: %d clients", got)
+	}
+	assertProcessSnapshot(t, msg, ports, false)
+	if srv.JetStreamEnabled() {
+		t.Fatal("jetstream is enabled")
+	}
+	status, body = get(t, ports.metrics, "/metrics")
+	if status != http.StatusOK || strings.Contains(string(body), "inference_request_success{") {
+		t.Fatalf("scrape %d %s", status, body)
+	}
+}
+
+func TestSnapshotCarriesPlatformNames(t *testing.T) {
+	t.Parallel()
+	srv := startNATSServer(t)
+	url := srv.ClientURL()
+	path, _, _ := writeProcessCredentials(t)
+	ports := pickPorts(t)
+	proc := startProcess(t, processEnv(t, ports, map[string]string{
+		"AUTH_MODE":                 "disabled",
+		"NATS_SERVER_URL":           url,
+		"NATS_CREDS_PATH":           path,
+		"ENGINE_SERVER_ID":          "engine-1",
+		"METRICS_INTERVAL":          "100ms",
+		"EDGELET_MICROSERVICE_NAME": "vision",
+		"EDGELET_NODE_UID":          "node-1",
+		"EDGELET_APPLICATION_NAME":  "factory",
+	}))
+	t.Cleanup(proc.kill)
+	waitLive(t, ports.http)
+	waitLog(t, proc, "nats connected")
+	waitClients(t, srv, 1)
+
+	nc, err := nats.Connect(url, nats.NoReconnect())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(nc.Close)
+	snapshots, err := nc.SubscribeSync("inference.metrics.engines.>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := nc.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	msg, err := snapshots.NextMsg(2 * time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := srv.NumClients(); got != 2 {
+		t.Fatalf("publish opened another connection: %d clients", got)
+	}
+	assertProcessSnapshot(t, msg, ports, true)
 }
 
 // countingListener accepts connections on a local port and counts them.
@@ -212,7 +278,7 @@ func refusedAddress(t *testing.T) string {
 	return addr
 }
 
-func startNATSServer(t *testing.T) string {
+func startNATSServer(t *testing.T) *server.Server {
 	t.Helper()
 	srv, err := server.NewServer(&server.Options{Host: "127.0.0.1", Port: server.RANDOM_PORT, NoLog: true, NoSigs: true})
 	if err != nil {
@@ -223,7 +289,77 @@ func startNATSServer(t *testing.T) string {
 	if !srv.ReadyForConnections(natsReplyWait) {
 		t.Fatal("embedded NATS server did not start")
 	}
-	return srv.ClientURL()
+	return srv
+}
+
+func waitClients(t *testing.T, srv *server.Server, want int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		got := srv.NumClients()
+		if got > want {
+			t.Fatalf("clients %d", got)
+		}
+		if got == want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("clients %d", srv.NumClients())
+}
+
+func assertProcessSnapshot(t *testing.T, msg *nats.Msg, ports listenPorts, withNames bool) {
+	t.Helper()
+	if msg.Subject != "inference.metrics.engines.engine-1" {
+		t.Fatalf("subject %s", msg.Subject)
+	}
+	if msg.Reply != "" {
+		t.Fatalf("reply %q", msg.Reply)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(msg.Data, &raw); err != nil {
+		t.Fatalf("decode %s: %v", msg.Data, err)
+	}
+	if string(raw["schema"]) != "1" {
+		t.Fatalf("schema %s", raw["schema"])
+	}
+	if string(raw["server_id"]) != `"engine-1"` || string(raw["models"]) != "[]" {
+		t.Fatalf("identity %s models %s", raw["server_id"], raw["models"])
+	}
+	if string(raw["live"]) != "true" || string(raw["nats_connected"]) != "true" {
+		t.Fatalf("live %s nats %s", raw["live"], raw["nats_connected"])
+	}
+	live, _ := get(t, ports.http, "/v2/health/live")
+	ready, _ := get(t, ports.http, "/v2/health/ready")
+	wantReady := "false"
+	if ready == http.StatusOK {
+		wantReady = "true"
+	}
+	if live != http.StatusOK || string(raw["ready"]) != wantReady {
+		t.Fatalf("http live %d ready %d snapshot ready %s", live, ready, raw["ready"])
+	}
+	for _, key := range []string{"inputs", "outputs", "process_resident_memory_bytes"} {
+		if _, ok := raw[key]; ok {
+			t.Fatalf("field %s is present", key)
+		}
+	}
+	names := map[string]string{
+		"microservice_name": `"vision"`,
+		"node_uid":          `"node-1"`,
+		"application_name":  `"factory"`,
+	}
+	for key, want := range names {
+		got, ok := raw[key]
+		if withNames {
+			if !ok || string(got) != want {
+				t.Fatalf("%s %s", key, got)
+			}
+			continue
+		}
+		if ok {
+			t.Fatalf("unset %s is present", key)
+		}
+	}
 }
 
 // writeProcessCredentials mints a user credentials file in a temp directory and returns its path, JWT, and seed.

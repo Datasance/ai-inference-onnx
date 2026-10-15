@@ -48,7 +48,7 @@ func TestDisabledMissingDirectoriesServesLiveNotReady(t *testing.T) {
 	assertGET(t, ports.http, "/v2/health/live", http.StatusOK)
 	assertGET(t, ports.http, "/v2/health/ready", http.StatusBadRequest)
 	assertGRPCHealth(t, ports.grpc, false)
-	assertRefused(t, hostPort(ports.metrics))
+	assertMetricsOpen(t, ports.metrics)
 	assertAccepts(t, hostPort(ports.grpc))
 
 	if err := proc.signal(syscall.SIGTERM); err != nil {
@@ -192,11 +192,14 @@ func TestDependenciesIncludeNATSExcludeRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go list: %v\n%s", err, out)
 	}
-	var client bool
+	var client, prometheus bool
 	for _, line := range strings.Split(string(out), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "github.com/nats-io/nats.go" {
 			client = true
+		}
+		if strings.HasPrefix(line, "github.com/prometheus/client_golang") {
+			prometheus = true
 		}
 		if strings.Contains(strings.ToLower(line), "onnxruntime") {
 			t.Errorf("unexpected dependency %s", line)
@@ -207,6 +210,9 @@ func TestDependenciesIncludeNATSExcludeRuntime(t *testing.T) {
 	}
 	if !client {
 		t.Error("the process does not link github.com/nats-io/nats.go")
+	}
+	if !prometheus {
+		t.Error("the process does not link github.com/prometheus/client_golang")
 	}
 }
 
@@ -514,6 +520,45 @@ func assertGRPCHealth(t *testing.T, port int, readyWant bool) {
 	if ready.GetReady() != readyWant {
 		t.Fatalf("server ready %v", ready.GetReady())
 	}
+}
+
+func assertMetricsOpen(t *testing.T, port int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	var last error
+	for time.Now().Before(deadline) {
+		status, body, err := getErr(port, "/metrics")
+		if err == nil && status == http.StatusOK && expositionReady(body) {
+			return
+		}
+		if err != nil {
+			last = err
+		} else {
+			last = fmt.Errorf("status %d body %q", status, body)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("metrics: %v", last)
+}
+
+func expositionReady(body []byte) bool {
+	text := string(body)
+	for _, line := range []string{
+		"# TYPE inference_request_success counter",
+		"# TYPE inference_request_failure counter",
+		"# TYPE inference_count counter",
+		"# TYPE inference_exec_count counter",
+		"# TYPE inference_pending_request_count gauge",
+		"# TYPE inference_request_duration_us counter",
+		"# TYPE inference_queue_duration_us counter",
+		"# TYPE inference_compute_infer_duration_us counter",
+		"# TYPE inference_model_ready gauge",
+	} {
+		if !strings.Contains(text, line) {
+			return false
+		}
+	}
+	return strings.Contains(text, "process_resident_memory_bytes")
 }
 
 func assertRefused(t *testing.T, addr string) {

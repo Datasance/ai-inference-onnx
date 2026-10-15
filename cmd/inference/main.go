@@ -1,6 +1,8 @@
 // Command inference loads server settings and serves HTTP and gRPC.
 // HTTP serves health checks, server metadata, the model list, model metadata, model ready, the repository index, and infer.
 // gRPC serves health checks, server metadata, model metadata, model ready, the repository index, and infer.
+// The metrics port serves GET /metrics as plain HTTP and does not require a caller token.
+// That listener does not present the REST certificate.
 // When both the NATS server URL and the credentials path are set, the same calls are also served on NATS.
 // A NATS server that cannot be reached is retried in the background and does not stop the process.
 // Invalid settings or an unusable Edgelet signing key stop the process before it listens.
@@ -19,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -28,6 +31,8 @@ import (
 	"github.com/eclipse-iofog/ai-inference-onnx/internal/config"
 	"github.com/eclipse-iofog/ai-inference-onnx/internal/grpcapi"
 	"github.com/eclipse-iofog/ai-inference-onnx/internal/httpapi"
+	"github.com/eclipse-iofog/ai-inference-onnx/internal/metrics"
+	"github.com/eclipse-iofog/ai-inference-onnx/internal/natsapi"
 )
 
 var _ httpapi.Catalog = (*modelRuntime)(nil)
@@ -62,7 +67,9 @@ func run() int {
 		return 1
 	}
 
-	models := startModels(cfg, logger)
+	// notes receives a copy of the model list after a state is stored.
+	notes := make(chan []metrics.ModelState, 16)
+	models := startModels(cfg, logger, notes)
 	api := httpapi.New(checker, models.ready)
 	api.RegisterReads(models)
 	api.RegisterInfer(httpapi.InferConfig{
@@ -85,7 +92,17 @@ func run() int {
 		Logger:          logger,
 	})
 
-	httpLn, grpcLn, err := listen(cfg)
+	// registry is the one set of counters for this process.
+	// The metrics listener and the snapshot read it.
+	registry := metrics.New()
+	models.useRegistry(registry)
+	metricsServer := &http.Server{
+		Handler:           newMetricsHandler(registry),
+		ReadHeaderTimeout: headerTimeout,
+		ErrorLog:          httpErrorLog(logger),
+	}
+
+	httpLn, grpcLn, metricsLn, err := listen(cfg)
 	if err != nil {
 		logger.Error(fmt.Sprintf("listen: %v", err))
 		if stopErr := models.shutdown(); stopErr != nil {
@@ -95,22 +112,47 @@ func run() int {
 	}
 	logger.Info("http listener is up", "addr", httpLn.Addr().String())
 	logger.Info("grpc listener is up", "addr", grpcLn.Addr().String())
+	logger.Info("metrics listener is up", "addr", metricsLn.Addr().String())
 
 	natsCtx, cancelNATS := context.WithCancel(context.Background())
 	defer cancelNATS()
+	snapCtx, cancelSnap := context.WithCancel(context.Background())
+	defer cancelSnap()
+	var leaf atomic.Pointer[natsapi.Listener]
+	go metrics.NewPublisher(metrics.PublisherConfig{
+		Registry:         registry,
+		Interval:         cfg.MetricsInterval,
+		ServerID:         cfg.ServerID,
+		MicroserviceName: cfg.MicroserviceName,
+		NodeUID:          cfg.NodeUID,
+		ApplicationName:  cfg.ApplicationName,
+		Live:             func() bool { return true },
+		Ready:            models.ready,
+		Connected:        func() bool { return leaf.Load().Connected() },
+		Publish: func(subject string, body []byte) error {
+			return leaf.Load().Publish(subject, body)
+		},
+		Models: models.modelStates,
+		Notes:  notes,
+	}).Run(snapCtx)
 	bus := startNATS(natsCtx, cfg, models, logger)
+	leaf.Store(bus)
 	stopAll := func() int {
+		cancelSnap()
 		cancelNATS()
 		bus.Close()
-		return finish(logger, httpServer, grpcServer, models)
+		return finish(logger, httpServer, metricsServer, grpcServer, models)
 	}
 
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
 	go func() {
 		errCh <- serveHTTP(httpServer, httpLn, tlsConfig)
 	}()
 	go func() {
 		errCh <- serveGRPC(grpcServer, grpcLn)
+	}()
+	go func() {
+		errCh <- serveMetrics(metricsServer, metricsLn)
 	}()
 
 	signals := make(chan os.Signal, 1)
@@ -132,8 +174,8 @@ func run() int {
 
 // finish stops listeners, lets an in-flight run finish, closes sessions, and then releases the runtime.
 // A shutdown error is logged and the process exits.
-func finish(logger *slog.Logger, httpServer *http.Server, grpcServer *grpcapi.Server, models *modelRuntime) int {
-	err := stop(httpServer, grpcServer)
+func finish(logger *slog.Logger, httpServer *http.Server, metricsServer *http.Server, grpcServer *grpcapi.Server, models *modelRuntime) int {
+	err := stop(httpServer, metricsServer, grpcServer)
 	if modelsErr := models.shutdown(); modelsErr != nil {
 		err = errors.Join(err, modelsErr)
 	}
@@ -144,19 +186,30 @@ func finish(logger *slog.Logger, httpServer *http.Server, grpcServer *grpcapi.Se
 	return 0
 }
 
-func listen(cfg config.Config) (net.Listener, net.Listener, error) {
+func listen(cfg config.Config) (net.Listener, net.Listener, net.Listener, error) {
 	httpLn, err := net.Listen("tcp", httpapi.ListenAddr(cfg.HTTPPort))
 	if err != nil {
-		return nil, nil, fmt.Errorf("http %s: %w", httpapi.ListenAddr(cfg.HTTPPort), err)
+		return nil, nil, nil, fmt.Errorf("http %s: %w", httpapi.ListenAddr(cfg.HTTPPort), err)
 	}
 	grpcLn, err := net.Listen("tcp", grpcapi.ListenAddr(cfg.GRPCPort))
 	if err != nil {
-		if closeErr := httpLn.Close(); closeErr != nil {
-			return nil, nil, fmt.Errorf("grpc %s: %w", grpcapi.ListenAddr(cfg.GRPCPort), errors.Join(err, closeErr))
-		}
-		return nil, nil, fmt.Errorf("grpc %s: %w", grpcapi.ListenAddr(cfg.GRPCPort), err)
+		return nil, nil, nil, joinClose(fmt.Errorf("grpc %s: %w", grpcapi.ListenAddr(cfg.GRPCPort), err), httpLn)
 	}
-	return httpLn, grpcLn, nil
+	metricsLn, err := net.Listen("tcp", httpapi.ListenAddr(cfg.MetricsPort))
+	if err != nil {
+		return nil, nil, nil, joinClose(fmt.Errorf("metrics %s: %w", httpapi.ListenAddr(cfg.MetricsPort), err), httpLn, grpcLn)
+	}
+	return httpLn, grpcLn, metricsLn, nil
+}
+
+// joinClose closes listeners and returns err together with any close error.
+func joinClose(err error, listeners ...net.Listener) error {
+	for _, ln := range listeners {
+		if closeErr := ln.Close(); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}
+	return err
 }
 
 func newGRPCServer(checker *auth.Checker, ready func() bool, tlsConfig *tls.Config) *grpcapi.Server {
@@ -182,12 +235,16 @@ func serveGRPC(server *grpcapi.Server, ln net.Listener) error {
 	return err
 }
 
-func stop(httpServer *http.Server, grpcServer *grpcapi.Server) error {
+func stop(httpServer *http.Server, metricsServer *http.Server, grpcServer *grpcapi.Server) error {
 	grpcServer.GracefulStop()
 	ctx, cancel := context.WithTimeout(context.Background(), stopTimeout)
 	defer cancel()
-	if err := httpServer.Shutdown(ctx); err != nil {
-		return fmt.Errorf("http: %w", err)
+	return errors.Join(shutdownServer(ctx, "http", httpServer), shutdownServer(ctx, "metrics", metricsServer))
+}
+
+func shutdownServer(ctx context.Context, name string, server *http.Server) error {
+	if err := server.Shutdown(ctx); err != nil {
+		return fmt.Errorf("%s: %w", name, err)
 	}
 	return nil
 }

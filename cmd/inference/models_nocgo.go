@@ -10,6 +10,7 @@ import (
 	"github.com/eclipse-iofog/ai-inference-onnx/internal/batch"
 	"github.com/eclipse-iofog/ai-inference-onnx/internal/config"
 	"github.com/eclipse-iofog/ai-inference-onnx/internal/httpapi"
+	"github.com/eclipse-iofog/ai-inference-onnx/internal/metrics"
 )
 
 var (
@@ -22,8 +23,14 @@ var (
 type modelRuntime struct{}
 
 // startModels leaves the model set empty.
-func startModels(config.Config, *slog.Logger) *modelRuntime {
+// notes is unused because this build does not load models.
+func startModels(config.Config, *slog.Logger, chan<- []metrics.ModelState) *modelRuntime {
 	return &modelRuntime{}
+}
+
+// modelStates returns no versions. This build does not load models.
+func (m *modelRuntime) modelStates() []metrics.ModelState {
+	return []metrics.ModelState{}
 }
 
 // ready reports that no model can serve.
@@ -36,6 +43,9 @@ func (m *modelRuntime) ready() bool {
 func (m *modelRuntime) Models() []batch.Directory {
 	return nil
 }
+
+// useRegistry counts nothing. This build does not load models.
+func (m *modelRuntime) useRegistry(*metrics.Registry) {}
 
 // Run reports that the model was not found. This build does not load the runtime library.
 func (m *modelRuntime) Run(_ context.Context, name, _ string, _ *batch.Request) (*batch.Reply, error) {
