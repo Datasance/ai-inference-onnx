@@ -16,6 +16,11 @@ func (r *Repository) Catalog() []CatalogModel {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.catalogLocked()
+}
+
+// catalogLocked copies the model list. The caller holds the repository lock.
+func (r *Repository) catalogLocked() []CatalogModel {
 	out := make([]CatalogModel, 0, len(r.order))
 	for _, name := range r.order {
 		item := r.models[name]

@@ -23,8 +23,9 @@ const reasonLoading = "model is loading"
 
 // StateFunc is called after a model state is stored.
 // name is the model directory. state is the stored state.
+// models is a copy of the model list after that store.
 // A nil function does nothing. The function must not call back into the repository.
-type StateFunc func(name string, state State)
+type StateFunc func(name string, state State, models []CatalogModel)
 
 // Config chooses directories, thread counts, the execution provider, and an optional state function for a load.
 type Config struct {

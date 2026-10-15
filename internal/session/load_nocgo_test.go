@@ -17,7 +17,7 @@ func TestStateFunctionWithoutLibrary(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls := 0
-	fn := func(string, State) { calls++ }
+	fn := func(string, State, []CatalogModel) { calls++ }
 	repo, err := Load(Config{
 		ModelsRoot:    root,
 		KnowledgeRoot: t.TempDir(),

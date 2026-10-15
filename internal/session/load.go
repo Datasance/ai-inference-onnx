@@ -113,16 +113,26 @@ func (r *Repository) OnState(fn StateFunc) {
 }
 
 // note reports a state that has already been stored.
+// The function receives a copy of the model list and runs without the repository lock.
 func (r *Repository) note(name string, state State) {
 	if r == nil {
 		return
 	}
-	r.mu.Lock()
-	fn := r.onState
-	r.mu.Unlock()
-	if fn != nil {
-		fn(name, state)
+	fn, models := r.storedState()
+	if fn == nil {
+		return
 	}
+	fn(name, state, models)
+}
+
+// storedState returns the state function and a copy of the model list.
+func (r *Repository) storedState() (StateFunc, []CatalogModel) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.onState == nil {
+		return nil, nil
+	}
+	return r.onState, r.catalogLocked()
 }
 
 func (r *Repository) loadOne(cfg Config, discovered discover.Model) {
