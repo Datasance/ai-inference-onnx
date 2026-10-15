@@ -4,14 +4,18 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -47,7 +51,10 @@ func TestRuntimeModelBecomesReady(t *testing.T) {
 	waitStatus(t, ports.http, "/v2/health/live", http.StatusOK, 20*time.Second)
 	waitStatus(t, ports.http, "/v2/health/ready", http.StatusOK, 20*time.Second)
 	assertGRPCHealth(t, ports.grpc, true)
-	assertPostNotFound(t, ports.http, "/v2/models/add/infer")
+	assertAddInfer(t, ports.http)
+	assertGRPCAddInfer(t, ports.grpc)
+	assertGET(t, ports.http, "/v2/health/live", http.StatusOK)
+	assertGET(t, ports.http, "/v2/health/ready", http.StatusOK)
 	assertRefused(t, hostPort(ports.metrics))
 	time.Sleep(200 * time.Millisecond)
 	if dials.Load() != 0 {
@@ -189,29 +196,174 @@ func waitStatus(t *testing.T, port int, path string, status int, timeout time.Du
 	t.Fatalf("%s: %v", path, last)
 }
 
-func assertPostNotFound(t *testing.T, port int, path string) {
+func assertAddInfer(t *testing.T, port int) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	for _, path := range []string{"/v2/models/add/infer", "/v2/models/add/versions/1/infer"} {
+		status, hdr, body := postInfer(t, port, path, []byte(addJSON("add-json")), nil)
+		assertThreesJSON(t, path, status, hdr, body, "add-json")
+		status, hdr, body = postInfer(t, port, path, addBinary("add-bin"), map[string]string{
+			"Inference-Header-Content-Length": strconv.Itoa(len(addBinaryHeader("add-bin"))),
+		})
+		assertThreesBinary(t, path, status, hdr, body, "add-bin")
+	}
+	status, _, body := postInfer(t, port, "/v2/models/add/versions/2/infer", []byte(addJSON("x")), nil)
+	assertInferStatus(t, status, body, http.StatusNotFound)
+	status, _, body = postInfer(t, port, "/v2/models/add/versions/latest/infer", []byte(addJSON("x")), nil)
+	assertInferStatus(t, status, body, http.StatusNotFound)
+	status, _, body = postInfer(t, port, "/v2/models/missing/infer", []byte(addJSON("x")), nil)
+	assertInferStatus(t, status, body, http.StatusNotFound)
+	status, _, body = postInfer(t, port, "/v2/models/add/infer", []byte(`{"inputs":[{"name":"A","datatype":"INT32","shape":[2,3],"data":[1,1,1,1,1,1]},{"name":"B","datatype":"FP32","shape":[2,3],"data":[1,1,1,1,1,1]}]}`), nil)
+	assertInferStatus(t, status, body, http.StatusBadRequest)
+	status, _, body = postInfer(t, port, "/v2/models/add/infer", float32LE(1, 2, 3), map[string]string{
+		"Inference-Header-Content-Length": "0",
+	})
+	assertInferStatus(t, status, body, http.StatusBadRequest)
+}
+
+func assertThreesJSON(t *testing.T, path string, status int, hdr http.Header, body []byte, id string) {
+	t.Helper()
+	if status != http.StatusOK {
+		t.Fatalf("%s status %d body %s", path, status, body)
+	}
+	if hdr.Get("Content-Type") != "application/json" {
+		t.Fatalf("%s Content-Type %q", path, hdr.Get("Content-Type"))
+	}
+	if hdr.Get("Inference-Header-Content-Length") != "" {
+		t.Fatalf("%s binary header %q", path, hdr.Get("Inference-Header-Content-Length"))
+	}
+	doc := decodeInfer(t, body)
+	if doc.ModelName != "add" || doc.ModelVersion != "1" || doc.ID != id {
+		t.Fatalf("%s response %+v", path, doc)
+	}
+	if len(doc.Outputs) != 1 || doc.Outputs[0].Name != "C" || doc.Outputs[0].Datatype != "FP32" {
+		t.Fatalf("%s outputs %+v", path, doc.Outputs)
+	}
+	if len(doc.Outputs[0].Shape) != 2 || doc.Outputs[0].Shape[0] != 2 || doc.Outputs[0].Shape[1] != 3 {
+		t.Fatalf("%s shape %v", path, doc.Outputs[0].Shape)
+	}
+	if len(doc.Outputs[0].Data) != 6 {
+		t.Fatalf("%s data %v", path, doc.Outputs[0].Data)
+	}
+	for i, value := range doc.Outputs[0].Data {
+		if value != 3 {
+			t.Fatalf("%s output[%d]=%v", path, i, value)
+		}
+	}
+}
+
+func assertThreesBinary(t *testing.T, path string, status int, hdr http.Header, body []byte, id string) {
+	t.Helper()
+	if status != http.StatusOK {
+		t.Fatalf("%s status %d body %s", path, status, body)
+	}
+	if hdr.Get("Content-Type") != "application/octet-stream" {
+		t.Fatalf("%s Content-Type %q", path, hdr.Get("Content-Type"))
+	}
+	n, err := strconv.Atoi(hdr.Get("Inference-Header-Content-Length"))
+	if err != nil || n <= 0 || n >= len(body) {
+		t.Fatalf("%s header %q body %d", path, hdr.Get("Inference-Header-Content-Length"), len(body))
+	}
+	doc := decodeInfer(t, body[:n])
+	if doc.ModelName != "add" || doc.ModelVersion != "1" || doc.ID != id {
+		t.Fatalf("%s header %+v", path, doc)
+	}
+	if len(doc.Outputs) != 1 || doc.Outputs[0].Name != "C" {
+		t.Fatalf("%s outputs %+v", path, doc.Outputs)
+	}
+	suffix := body[n:]
+	if len(suffix) != 24 {
+		t.Fatalf("%s suffix %d", path, len(suffix))
+	}
+	for i := 0; i < 6; i++ {
+		value := math.Float32frombits(binary.LittleEndian.Uint32(suffix[i*4:]))
+		if value != 3 {
+			t.Fatalf("%s suffix[%d]=%v", path, i, value)
+		}
+	}
+}
+
+func assertInferStatus(t *testing.T, status int, body []byte, want int) {
+	t.Helper()
+	if status != want {
+		t.Fatalf("status %d body %s", status, body)
+	}
+	var doc struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &doc); err != nil || doc.Error == "" {
+		t.Fatalf("body %s", body)
+	}
+}
+
+type inferOutput struct {
+	Name     string    `json:"name"`
+	Datatype string    `json:"datatype"`
+	Shape    []int64   `json:"shape"`
+	Data     []float64 `json:"data"`
+}
+
+type inferDocument struct {
+	ModelName    string        `json:"model_name"`
+	ModelVersion string        `json:"model_version"`
+	ID           string        `json:"id"`
+	Outputs      []inferOutput `json:"outputs"`
+}
+
+func decodeInfer(t *testing.T, body []byte) inferDocument {
+	t.Helper()
+	var doc inferDocument
+	if err := json.Unmarshal(body, &doc); err != nil {
+		t.Fatalf("json %s: %v", body, err)
+	}
+	return doc
+}
+
+func addJSON(id string) string {
+	return `{"id":"` + id + `","inputs":[` +
+		`{"name":"A","datatype":"FP32","shape":[2,3],"data":[1,1,1,1,1,1]},` +
+		`{"name":"B","datatype":"FP32","shape":[2,3],"data":[2,2,2,2,2,2]}]}`
+}
+
+func addBinaryHeader(id string) string {
+	return `{"id":"` + id + `","parameters":{"binary_data_output":true},"inputs":[` +
+		`{"name":"A","datatype":"FP32","shape":[2,3],"parameters":{"binary_data_size":24}},` +
+		`{"name":"B","datatype":"FP32","shape":[2,3],"parameters":{"binary_data_size":24}}]}`
+}
+
+func addBinary(id string) []byte {
+	body := append([]byte(addBinaryHeader(id)), float32LE(1, 1, 1, 1, 1, 1)...)
+	return append(body, float32LE(2, 2, 2, 2, 2, 2)...)
+}
+
+func float32LE(vals ...float32) []byte {
+	buf := make([]byte, 4*len(vals))
+	for i, value := range vals {
+		binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(value))
+	}
+	return buf
+}
+
+func postInfer(t *testing.T, port int, path string, body []byte, headers map[string]string) (int, http.Header, []byte) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://127.0.0.1:%d%s", port, path), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://127.0.0.1:%d%s", port, path), strings.NewReader(string(body)))
 	if err != nil {
 		t.Fatal(err)
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
 	}
 	resp, err := healthClient.Do(req)
 	if err != nil {
 		t.Fatalf("POST %s: %v", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
+	payload, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("POST %s status %d body %q", path, resp.StatusCode, body)
-	}
-	if string(body) != `{"error":"not found"}` {
-		t.Fatalf("POST %s body %q", path, body)
-	}
+	return resp.StatusCode, resp.Header, payload
 }
 
 func listenForDial(t *testing.T) (string, *atomic.Int32) {
@@ -369,8 +521,8 @@ func startCgoProcess(t *testing.T, env []string) *running {
 	cmd := exec.Command(cgoInferenceBinary(t))
 	cmd.Env = env
 	proc := &running{cmd: cmd, waited: make(chan struct{})}
-	cmd.Stdout = &proc.out
-	cmd.Stderr = &proc.out
+	cmd.Stdout = &proc.stdout
+	cmd.Stderr = &proc.stderr
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}

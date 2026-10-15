@@ -19,7 +19,9 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"github.com/eclipse-iofog/ai-inference-onnx/api/openinference/v2"
 	"github.com/eclipse-iofog/ai-inference-onnx/internal/auth"
@@ -55,6 +57,47 @@ func TestDisabledMissingDirectoriesServesLiveNotReady(t *testing.T) {
 	if err := proc.waitTimeout(t, 5*time.Second); err != nil {
 		t.Fatalf("exit after signal: %v\n%s", err, proc.output())
 	}
+}
+
+func TestEmptyRepositoryReadRoutes(t *testing.T) {
+	t.Parallel()
+	ports := pickPorts(t)
+	proc := startProcess(t, processEnv(t, ports, map[string]string{
+		"AUTH_MODE": "disabled",
+	}))
+	t.Cleanup(proc.kill)
+	waitLive(t, ports.http)
+
+	status, body := get(t, ports.http, "/v2")
+	if status != http.StatusOK || string(body) != `{"name":"inference","version":"dev","extensions":["binary_tensor_data","model_repository","parameters","schedule_policy"]}` {
+		t.Fatalf("metadata %d %s", status, body)
+	}
+	status, body = get(t, ports.http, "/v2/models")
+	if status != http.StatusOK || string(body) != `{"models":[]}` {
+		t.Fatalf("list %d %s", status, body)
+	}
+	status, body = post(t, ports.http, "/v2/repository/index", `{}`)
+	if status != http.StatusOK || string(body) != "[]" {
+		t.Fatalf("index %d %s", status, body)
+	}
+	status, body = post(t, ports.http, "/v2/models/add/infer", "")
+	if status != http.StatusNotFound || string(body) != `{"error":"model \"add\" was not found"}` {
+		t.Fatalf("infer %d %s", status, body)
+	}
+	status, body = post(t, ports.http, "/v2/models/add/versions/1/infer", "")
+	if status != http.StatusNotFound || string(body) != `{"error":"model \"add\" was not found"}` {
+		t.Fatalf("versioned infer %d %s", status, body)
+	}
+	status, body = post(t, ports.http, "/v2/repository/models/missing/load", "")
+	if status != http.StatusNotImplemented || string(body) != `{"error":"loading and unloading models is not supported"}` {
+		t.Fatalf("load %d %s", status, body)
+	}
+	status, body = post(t, ports.http, "/v2/repository/models/missing/unload", "")
+	if status != http.StatusNotImplemented || string(body) != `{"error":"loading and unloading models is not supported"}` {
+		t.Fatalf("unload %d %s", status, body)
+	}
+	assertGRPCInferMissing(t, ports.grpc)
+	assertGET(t, ports.http, "/v2/health/live", http.StatusOK)
 }
 
 func TestAuthModeUnsetExitsBeforeListen(t *testing.T) {
@@ -365,6 +408,26 @@ func waitLog(t *testing.T, proc *running, contains string) string {
 	return ""
 }
 
+func post(t *testing.T, port int, path, body string) (int, []byte) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://127.0.0.1:%d%s", port, path), strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := healthClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s: %v", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	payload, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, payload
+}
+
 func get(t *testing.T, port int, path string) (int, []byte) {
 	t.Helper()
 	status, body, err := getErr(port, path)
@@ -398,6 +461,34 @@ var healthClient = &http.Client{
 	Transport: &http.Transport{
 		DisableKeepAlives: true,
 	},
+}
+
+func assertGRPCInferMissing(t *testing.T, port int) {
+	t.Helper()
+	conn, err := grpc.NewClient(hostPort(port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("dial grpc: %v", err)
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Errorf("close grpc: %v", err)
+		}
+	}()
+	client := openinference.NewGRPCInferenceServiceClient(conn)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = client.ModelInfer(ctx, &openinference.ModelInferRequest{ModelName: "add"})
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("infer %v", err)
+	}
+	_, err = client.RepositoryModelLoad(ctx, &openinference.RepositoryModelLoadRequest{ModelName: "add"})
+	if status.Code(err) != codes.Unimplemented {
+		t.Fatalf("load %v", err)
+	}
+	_, err = client.RepositoryModelUnload(ctx, &openinference.RepositoryModelUnloadRequest{ModelName: "add"})
+	if status.Code(err) != codes.Unimplemented {
+		t.Fatalf("unload %v", err)
+	}
 }
 
 func assertGRPCHealth(t *testing.T, port int, readyWant bool) {

@@ -1,4 +1,6 @@
-// Command inference loads server settings and serves HTTP and gRPC health checks.
+// Command inference loads server settings and serves HTTP and gRPC.
+// HTTP serves health checks, server metadata, the model list, model metadata, model ready, the repository index, and infer.
+// gRPC serves health checks, server metadata, model metadata, model ready, the repository index, and infer.
 // Invalid settings or an unusable Edgelet signing key stop the process before it listens.
 // When the runtime library is available, model sessions start from the model and knowledge directories.
 // A signal stops listeners, closes those sessions, and then releases the runtime.
@@ -25,6 +27,8 @@ import (
 	"github.com/eclipse-iofog/ai-inference-onnx/internal/grpcapi"
 	"github.com/eclipse-iofog/ai-inference-onnx/internal/httpapi"
 )
+
+var _ httpapi.Catalog = (*modelRuntime)(nil)
 
 const (
 	// headerTimeout bounds how long a connection may sit before sending headers.
@@ -57,12 +61,27 @@ func run() int {
 	}
 
 	models := startModels(cfg, logger)
+	api := httpapi.New(checker, models.ready)
+	api.RegisterReads(models)
+	api.RegisterInfer(httpapi.InferConfig{
+		Catalog:         models,
+		Runner:          models,
+		MaxPayloadBytes: cfg.MaxPayloadBytes,
+		Logger:          logger,
+	})
 	httpServer := &http.Server{
-		Handler:           httpapi.New(checker, models.ready),
+		Handler:           api,
 		ReadHeaderTimeout: headerTimeout,
 		ErrorLog:          httpErrorLog(logger),
 	}
 	grpcServer := newGRPCServer(checker, models.ready, tlsConfig)
+	grpcServer.RegisterReads(models)
+	grpcServer.RegisterInfer(grpcapi.InferConfig{
+		Catalog:         models,
+		Runner:          models,
+		MaxPayloadBytes: cfg.MaxPayloadBytes,
+		Logger:          logger,
+	})
 
 	httpLn, grpcLn, err := listen(cfg)
 	if err != nil {
