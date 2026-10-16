@@ -37,7 +37,7 @@ func TestEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != "1.32.0" {
+	if version != "1.31.0" {
 		t.Fatalf("onnx runtime version %q", version)
 	}
 	if err := Init(); err != nil {
@@ -45,10 +45,30 @@ func TestEnvironment(t *testing.T) {
 	}
 
 	if CPUExecutionProvider != "CPUExecutionProvider" {
-		t.Fatalf("production provider %s", CPUExecutionProvider)
+		t.Fatalf("cpu provider %s", CPUExecutionProvider)
 	}
+	available, err := AvailableProviders()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cpuListed bool
+	for _, name := range available {
+		if name == CPUExecutionProvider {
+			cpuListed = true
+			break
+		}
+	}
+	if !cpuListed {
+		t.Fatalf("providers %v", available)
+	}
+	chain := SelectProviders(available, "")
+	if len(chain) != 1 || chain[0].Name != CPUExecutionProvider || len(chain[0].Options) != 0 {
+		t.Fatalf("chain %+v from %v", chain, available)
+	}
+
+	unused := filepath.Join(t.TempDir(), "unused.onnx")
 	for _, threads := range []int{1, 0} {
-		session, openErr := Open(filepath.Join(t.TempDir(), "unused.onnx"), threads, threads, "NoSuchProvider")
+		session, openErr := Open(unused, threads, threads, []Provider{{Name: "NoSuchProvider"}})
 		if openErr == nil || session != nil {
 			t.Fatalf("threads %d: session=%v err=%v", threads, session, openErr)
 		}
@@ -58,6 +78,18 @@ func TestEnvironment(t *testing.T) {
 		if strings.Contains(openErr.Error(), "create session") {
 			t.Fatalf("threads %d: session was created after the provider was rejected: %v", threads, openErr)
 		}
+	}
+
+	session, openErr := Open(unused, 1, 1, nil)
+	if openErr == nil || session != nil || !strings.Contains(openErr.Error(), "empty chain") {
+		t.Fatalf("empty chain: session=%v err=%v", session, openErr)
+	}
+	session, openErr = Open(unused, 1, 1, []Provider{{Name: CUDAExecutionProvider}})
+	if openErr == nil || session != nil {
+		t.Fatalf("cuda: session=%v err=%v", session, openErr)
+	}
+	if strings.Contains(openErr.Error(), "create session") {
+		t.Fatalf("cuda append opened a session: %v", openErr)
 	}
 
 	if err := Shutdown(); err != nil {

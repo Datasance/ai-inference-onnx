@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/eclipse-iofog/ai-inference-onnx/internal/ort"
 )
 
 func TestStateFunctionWithoutLibrary(t *testing.T) {
@@ -23,7 +25,7 @@ func TestStateFunctionWithoutLibrary(t *testing.T) {
 		KnowledgeRoot: t.TempDir(),
 		IntraOp:       1,
 		InterOp:       1,
-		Provider:      "CPUExecutionProvider",
+		Providers:     []ort.Provider{{Name: ort.CPUExecutionProvider}},
 		OnState:       fn,
 	}, pool)
 	if err == nil {
@@ -63,7 +65,7 @@ func TestLoadWithoutLibrary(t *testing.T) {
 		KnowledgeRoot: t.TempDir(),
 		IntraOp:       1,
 		InterOp:       1,
-		Provider:      "CPUExecutionProvider",
+		Providers:     []ort.Provider{{Name: ort.CPUExecutionProvider}},
 	}, pool)
 	if err == nil {
 		t.Fatal("Load succeeded without the runtime library")

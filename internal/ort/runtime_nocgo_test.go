@@ -16,7 +16,10 @@ func TestLibraryUnavailable(t *testing.T) {
 	if _, err := GetVersion(); err == nil {
 		t.Fatal("GetVersion succeeded without the runtime library")
 	}
-	session, err := Open("model.onnx", 1, 1, CPUExecutionProvider)
+	if _, err := AvailableProviders(); err == nil {
+		t.Fatal("AvailableProviders succeeded without the runtime library")
+	}
+	session, err := Open("model.onnx", 1, 1, []Provider{{Name: CPUExecutionProvider}})
 	if err == nil || session != nil {
 		t.Fatal("Open succeeded without the runtime library")
 	}

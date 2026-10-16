@@ -30,7 +30,7 @@ func TestSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != "1.32.0" {
+	if version != "1.31.0" {
 		t.Fatalf("onnx runtime version %q", version)
 	}
 
@@ -43,6 +43,7 @@ func TestSessions(t *testing.T) {
 	t.Run("filename", testFilename)
 	t.Run("failed version", testFailedVersion)
 	t.Run("provider", testProvider)
+	t.Run("cuda provider", testCUDAProvider)
 	t.Run("slot", testSlot)
 	t.Run("shutdown", testShutdown)
 }
@@ -272,6 +273,22 @@ func testProvider(t *testing.T) {
 	}
 }
 
+func testCUDAProvider(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "add", "model.onnx"), committedModel(t))
+	repo := loadRoots(t, root, t.TempDir(), ort.CUDAExecutionProvider)
+	model := findModel(t, repo, "add")
+	if model.State != Unavailable || model.Reason == "" {
+		t.Fatalf("state %s reason %q", model.State, model.Reason)
+	}
+	if !strings.Contains(strings.ToLower(model.Reason), "cuda") || strings.Contains(model.Reason, "create session") {
+		t.Fatalf("reason %q", model.Reason)
+	}
+	if len(model.Versions) != 0 || repo.sessionsOpen() != 0 {
+		t.Fatalf("versions %d sessions %d", len(model.Versions), repo.sessionsOpen())
+	}
+}
+
 func testSlot(t *testing.T) {
 	repo := loadRoots(t, committedRoot(t), t.TempDir(), "")
 	ones := float32Bytes(1, 1, 1, 1, 1, 1)
@@ -387,7 +404,7 @@ func testShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != "1.32.0" {
+	if version != "1.31.0" {
 		t.Fatalf("onnx runtime version %q", version)
 	}
 	ones := float32Bytes(1, 1, 1, 1, 1, 1)
@@ -425,7 +442,7 @@ func loadRoots(t *testing.T, models, knowledge, provider string) *Repository {
 		KnowledgeRoot: knowledge,
 		IntraOp:       1,
 		InterOp:       1,
-		Provider:      provider,
+		Providers:     []ort.Provider{{Name: provider}},
 	}, pool)
 	if err != nil {
 		t.Fatal(err)

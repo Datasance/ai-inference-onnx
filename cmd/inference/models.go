@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,10 +27,11 @@ var (
 
 // modelRuntime is the set of models loaded for this process.
 type modelRuntime struct {
-	repo    *session.Repository
-	watcher *session.Watcher
-	started bool
-	queues  inferQueues
+	repo      *session.Repository
+	watcher   *session.Watcher
+	started   bool
+	providers []ort.Provider
+	queues    inferQueues
 
 	mu    sync.Mutex
 	notes chan<- []metrics.ModelState
@@ -37,7 +39,7 @@ type modelRuntime struct {
 
 // startModels loads the shared library, opens one session per ready model version,
 // and watches the model and knowledge directories.
-// Thread counts come from server settings. Each session requests the CPU provider.
+// Thread counts come from server settings. Each session uses the provider chain the loaded library supports.
 // A library that cannot be loaded, or a models directory that cannot be read, leaves the set empty.
 // The process still answers, and ready stays false until a model can serve.
 // notes receives a copy of the model list after the load and after each later state change.
@@ -47,6 +49,18 @@ func startModels(cfg config.Config, logger *slog.Logger, notes chan<- []metrics.
 		return &modelRuntime{}
 	}
 	running := &modelRuntime{started: true}
+	available, err := ort.AvailableProviders()
+	if err != nil {
+		logger.Error(fmt.Sprintf("runtime: %v", err))
+		return running
+	}
+	cacheRoot, err := os.UserCacheDir()
+	if err != nil {
+		logger.Warn(fmt.Sprintf("user cache directory: %v", err))
+		cacheRoot = ""
+	}
+	running.providers = ort.SelectProviders(available, cacheRoot)
+	logExecutionProviders(logger, running.providers)
 	repo, pool, err := openRepository(cfg, logger, running)
 	if err != nil {
 		logger.Error(fmt.Sprintf("models: %v", err))
@@ -62,7 +76,7 @@ func startModels(cfg config.Config, logger *slog.Logger, notes chan<- []metrics.
 	running.queues.settings = running.batchSettings
 	running.forwardEnable(notes)
 	running.emit(notes)
-	watcher, err := watchRepository(cfg, repo)
+	watcher, err := watchRepository(cfg, repo, running.providers)
 	if err != nil {
 		logger.Error(fmt.Sprintf("watch: %v", err))
 		return running
@@ -76,7 +90,7 @@ func openRepository(cfg config.Config, logger *slog.Logger, running *modelRuntim
 	if err != nil {
 		return nil, nil, err
 	}
-	sessCfg := sessionConfig(cfg)
+	sessCfg := sessionConfig(cfg, running.providers)
 	sessCfg.OnState = func(name string, state session.State, models []session.CatalogModel) {
 		logModelState(logger, name, state)
 		running.forward(models)
@@ -148,8 +162,8 @@ func modelStatesFrom(models []session.CatalogModel) []metrics.ModelState {
 	return out
 }
 
-func watchRepository(cfg config.Config, repo *session.Repository) (*session.Watcher, error) {
-	watchCfg := sessionConfig(cfg)
+func watchRepository(cfg config.Config, repo *session.Repository, providers []ort.Provider) (*session.Watcher, error) {
+	watchCfg := sessionConfig(cfg, providers)
 	// A missing knowledge directory is not watched.
 	// Models still load, and a named item that is absent stays unavailable.
 	if !directory(cfg.KnowledgePath) {
@@ -158,14 +172,25 @@ func watchRepository(cfg config.Config, repo *session.Repository) (*session.Watc
 	return session.Watch(context.Background(), repo, watchCfg, session.PollPeriod, session.QuietPeriod)
 }
 
-func sessionConfig(cfg config.Config) session.Config {
+func sessionConfig(cfg config.Config, providers []ort.Provider) session.Config {
 	return session.Config{
 		ModelsRoot:    cfg.ModelsPath,
 		KnowledgeRoot: cfg.KnowledgePath,
 		IntraOp:       cfg.IntraOpThreads,
 		InterOp:       cfg.InterOpThreads,
-		Provider:      ort.CPUExecutionProvider,
+		Providers:     providers,
 	}
+}
+
+func logExecutionProviders(logger *slog.Logger, providers []ort.Provider) {
+	if logger == nil {
+		return
+	}
+	names := make([]string, len(providers))
+	for i, provider := range providers {
+		names[i] = provider.Name
+	}
+	logger.Info("execution providers: " + strings.Join(names, ", "))
 }
 
 func directory(path string) bool {

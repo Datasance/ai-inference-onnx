@@ -22,7 +22,7 @@ func TestRendezvousAddModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != "1.32.0" {
+	if version != "1.31.0" {
 		t.Fatalf("onnx runtime version %q", version)
 	}
 

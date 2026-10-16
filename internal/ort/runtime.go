@@ -65,11 +65,24 @@ type Session struct {
 	closed bool
 }
 
+// AvailableProviders returns the execution providers built into the loaded library.
+// It is available after Init succeeds.
+func AvailableProviders() ([]string, error) {
+	providers, err := onnxruntime.AvailableProviders()
+	if err != nil {
+		return nil, fmt.Errorf("read execution providers: %w", err)
+	}
+	return providers, nil
+}
+
 // Open loads one model into a session.
 // intraOp and interOp are passed through, including zero, which selects the runtime default.
-// provider is the only execution provider appended. Production callers pass CPUExecutionProvider.
-// A provider or file error returns no session.
-func Open(modelPath string, intraOp, interOp int, provider string) (session *Session, err error) {
+// providers are appended in order. The first failure closes the options and returns the error.
+// Nothing further is appended. An empty chain is an error. A provider or file error returns no session.
+func Open(modelPath string, intraOp, interOp int, providers []Provider) (session *Session, err error) {
+	if len(providers) == 0 {
+		return nil, errors.New("append execution provider: empty chain")
+	}
 	opts, err := onnxruntime.NewSessionOptions()
 	if err != nil {
 		return nil, fmt.Errorf("create session options: %w", err)
@@ -90,8 +103,10 @@ func Open(modelPath string, intraOp, interOp int, provider string) (session *Ses
 	if err = opts.SetInterOpNumThreads(interOp); err != nil {
 		return nil, fmt.Errorf("set inter-op threads: %w", err)
 	}
-	if err = opts.AppendExecutionProvider(provider, nil); err != nil {
-		return nil, fmt.Errorf("append execution provider: %w", err)
+	for _, provider := range providers {
+		if err = opts.AppendExecutionProvider(provider.Name, provider.Options); err != nil {
+			return nil, fmt.Errorf("append execution provider: %w", err)
+		}
 	}
 
 	inner, createErr := onnxruntime.NewSession(modelPath, opts)

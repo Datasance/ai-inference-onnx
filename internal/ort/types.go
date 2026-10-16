@@ -1,6 +1,6 @@
 package ort
 
-// CPUExecutionProvider is the execution provider a production session requests.
+// CPUExecutionProvider is the CPU execution provider.
 const CPUExecutionProvider = "CPUExecutionProvider"
 
 // ElementType is the ONNX element type of one tensor.

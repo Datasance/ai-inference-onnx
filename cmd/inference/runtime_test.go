@@ -68,6 +68,18 @@ func TestRuntimeModelBecomesReady(t *testing.T) {
 	assertGET(t, ports.http, "/v2/health/live", http.StatusOK)
 	assertGET(t, ports.http, "/v2/health/ready", http.StatusOK)
 	stopProcess(t, proc)
+	var chains, cacheWarns int
+	for _, line := range decodeLog(t, proc.stdout.String()) {
+		if strings.EqualFold(line.Level, "info") && line.Msg == "execution providers: CPUExecutionProvider" {
+			chains++
+		}
+		if strings.EqualFold(line.Level, "warn") && strings.Contains(line.Msg, "user cache directory") {
+			cacheWarns++
+		}
+	}
+	if chains != 1 || cacheWarns != 1 {
+		t.Fatalf("provider lines chains=%d cacheWarns=%d\n%s", chains, cacheWarns, proc.stdout.String())
+	}
 }
 
 func TestRuntimeNotReady(t *testing.T) {
@@ -489,7 +501,7 @@ func requireRuntime(t *testing.T) {
 			runtimeErr = err
 			return
 		}
-		if version != "1.32.0" {
+		if version != "1.31.0" {
 			runtimeErr = fmt.Errorf("onnx runtime version %q", version)
 		}
 	})

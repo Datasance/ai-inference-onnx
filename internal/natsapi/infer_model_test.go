@@ -27,7 +27,7 @@ func TestInferAddModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != "1.32.0" {
+	if version != "1.31.0" {
 		t.Fatalf("onnx runtime version %q", version)
 	}
 
@@ -87,7 +87,7 @@ func loadAddModel(t *testing.T) *addModels {
 		KnowledgeRoot: t.TempDir(),
 		IntraOp:       1,
 		InterOp:       1,
-		Provider:      ort.CPUExecutionProvider,
+		Providers:     []ort.Provider{{Name: ort.CPUExecutionProvider}},
 	}, pool)
 	if err != nil {
 		t.Fatal(err)

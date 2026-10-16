@@ -1,5 +1,7 @@
 package session
 
+import "github.com/eclipse-iofog/ai-inference-onnx/internal/ort"
+
 // State is the load state of one model directory.
 type State string
 
@@ -27,7 +29,7 @@ const reasonLoading = "model is loading"
 // A nil function does nothing. The function must not call back into the repository.
 type StateFunc func(name string, state State, models []CatalogModel)
 
-// Config chooses directories, thread counts, the execution provider, and an optional state function for a load.
+// Config chooses directories, thread counts, the execution provider chain, and an optional state function for a load.
 type Config struct {
 	// ModelsRoot is the directory whose children are models.
 	ModelsRoot string
@@ -37,9 +39,9 @@ type Config struct {
 	IntraOp int
 	// InterOp is the inter-op thread count passed to each session, including zero.
 	InterOp int
-	// Provider is the only execution provider requested for this load.
-	// Production callers pass CPUExecutionProvider.
-	Provider string
+	// Providers is the execution provider chain for this load.
+	// The loader passes it through unchanged.
+	Providers []ort.Provider
 	// OnState is called after a model state is stored.
 	// A nil function does nothing.
 	OnState StateFunc

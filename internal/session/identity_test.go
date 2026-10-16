@@ -25,7 +25,7 @@ func TestReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != "1.32.0" {
+	if version != "1.31.0" {
 		t.Fatalf("onnx runtime version %q", version)
 	}
 
@@ -515,7 +515,7 @@ func testConfig(models, knowledge string) Config {
 		KnowledgeRoot: knowledge,
 		IntraOp:       1,
 		InterOp:       1,
-		Provider:      ort.CPUExecutionProvider,
+		Providers:     []ort.Provider{{Name: ort.CPUExecutionProvider}},
 	}
 }
 

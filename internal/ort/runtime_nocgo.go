@@ -20,6 +20,11 @@ func GetVersion() (string, error) {
 	return "", errUnavailable
 }
 
+// AvailableProviders reports that no shared library is loaded.
+func AvailableProviders() ([]string, error) {
+	return nil, errUnavailable
+}
+
 // Shutdown reports that no environment was started.
 func Shutdown() error {
 	return nil
@@ -29,7 +34,7 @@ func Shutdown() error {
 type Session struct{}
 
 // Open reports that a session cannot be created.
-func Open(modelPath string, intraOp, interOp int, provider string) (*Session, error) {
+func Open(modelPath string, intraOp, interOp int, providers []Provider) (*Session, error) {
 	return nil, errUnavailable
 }
 

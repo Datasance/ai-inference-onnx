@@ -82,9 +82,9 @@ type versionSession struct {
 	slot      sync.Mutex
 }
 
-// Load resolves every model directory and opens one CPU session per selected version.
+// Load resolves every model directory and opens one session per selected version.
 // A directory that cannot be served is recorded as unavailable and has no session.
-// Thread counts and the provider come from cfg. Production callers pass CPUExecutionProvider.
+// Thread counts and the provider chain come from cfg. The loader passes the chain through unchanged.
 func Load(cfg Config, pool *Pool) (*Repository, error) {
 	if pool == nil {
 		return nil, errors.New("buffer pool is required")
@@ -202,7 +202,7 @@ func (r *Repository) fail(item *loadedModel, reason string, id modelID) {
 func (r *Repository) openVersions(cfg Config, item *loadedModel, discovered discover.Model) ([]*versionSession, error) {
 	opened := make([]*versionSession, 0, len(discovered.Versions))
 	for _, version := range discovered.Versions {
-		sess, err := ort.Open(version.Path, cfg.IntraOp, cfg.InterOp, cfg.Provider)
+		sess, err := ort.Open(version.Path, cfg.IntraOp, cfg.InterOp, cfg.Providers)
 		if err != nil {
 			r.retire(item, opened)
 			return nil, err
