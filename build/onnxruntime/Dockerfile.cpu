@@ -43,7 +43,7 @@ RUN build-onnxruntime.sh cpu arm64
 
 FROM --platform=$BUILDPLATFORM debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS build-cross
 
-ARG TARGETARCH
+ARG BUILDARCH
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
          ca-certificates \
@@ -58,10 +58,10 @@ RUN apt-get update \
          g++-riscv64-linux-gnu \
          binutils \
          patch \
-    && case "$TARGETARCH" in \
+    && case "$BUILDARCH" in \
          amd64) cmake_arch=x86_64; cmake_sum=312d78e0b7c5c9b4a97a87a46c3e525aa84895fe8135c238c4616bba73dc9518 ;; \
          arm64) cmake_arch=aarch64; cmake_sum=09b7127b09e3d3ed5fa894f4e59f6a01112f267da6acc4249e46dba97b14afcb ;; \
-         *) echo "no CMake archive for ${TARGETARCH}" >&2; exit 1 ;; \
+         *) echo "no CMake archive for ${BUILDARCH}" >&2; exit 1 ;; \
        esac \
     && curl -fsSL -o /tmp/cmake.tgz \
          "https://github.com/Kitware/CMake/releases/download/v3.31.9/cmake-3.31.9-linux-${cmake_arch}.tar.gz" \
