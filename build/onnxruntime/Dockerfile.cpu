@@ -65,13 +65,13 @@ RUN apt-get update \
     && tar -C /usr/local --strip-components=1 -xzf /tmp/cmake.tgz \
     && rm -f /tmp/cmake.tgz \
     && curl -fsSL -o /tmp/riscv-toolchain.tgz \
-         "https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2022.01.17/riscv64-glibc-ubuntu-20.04-nightly-2022.01.17-nightly.tar.gz" \
-    && echo "c11255d1e9e0fa7c5c2399a67d7884ea5fa85beede5cc79bf594469cb42743fc  /tmp/riscv-toolchain.tgz" | sha256sum -c - \
-    && mkdir -p /opt/riscv-toolchain \
-    && tar -C /opt/riscv-toolchain --strip-components=1 -xzf /tmp/riscv-toolchain.tgz \
-    && rm -f /tmp/riscv-toolchain.tgz \
-    && test -x /opt/riscv-toolchain/bin/riscv64-unknown-linux-gnu-gcc \
-    && test -d /opt/riscv-toolchain/sysroot \
+         "https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2024.04.12/riscv64-glibc-ubuntu-22.04-gcc-nightly-2024.04.12-nightly.tar.gz" \
+    && echo "5a386a6170934d03f468f9818a8541a3c479d26c7fde82f685008b7f5e3f8ccc  /tmp/riscv-toolchain.tgz" | sha256sum -c - \
+    && mkdir -p /opt/riscv \
+    && tar -C /opt/riscv --strip-components=1 -xzf /tmp/riscv-toolchain.tgz \
+    && rm -f /tmp/riscv-toolchain.tgz /opt/riscv/bin/qemu-riscv64 /opt/riscv/bin/qemu-riscv32 \
+    && test -x /opt/riscv/bin/riscv64-unknown-linux-gnu-gcc \
+    && test -d /opt/riscv/sysroot \
     && rm -rf /var/lib/apt/lists/*
 
 COPY scripts/build-onnxruntime.sh /usr/local/bin/build-onnxruntime.sh

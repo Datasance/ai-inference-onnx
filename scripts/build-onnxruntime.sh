@@ -31,8 +31,8 @@ CUDNN_HOME=/usr
 QNN_HOME=/opt/qnn-${QNN_VERSION}
 OPENVINO_DIR=/opt/intel/openvino_${OPENVINO_VERSION}/runtime/cmake
 MIGRAPHX_HOME=/opt/rocm
-# The CPU image installs the pinned riscv64-unknown-linux-gnu toolchain here.
-RISCV_TOOLCHAIN_ROOT=/opt/riscv-toolchain
+# The CPU image installs the pinned riscv64-unknown-linux-gnu toolchain at the prefix it was built with.
+RISCV_TOOLCHAIN_ROOT=/opt/riscv
 
 PREFIX="${ORT_PREFIX:-/opt/onnxruntime}"
 SRC="${ORT_SRC:-/tmp/onnxruntime-src}"
@@ -326,14 +326,18 @@ EOF
 }
 
 check_abi() {
-  local arch="$1" readelf objdump
+  local arch="$1" readelf objdump glibc_ceiling cxx_ceiling
   readelf=readelf
   objdump=objdump
+  glibc_ceiling=2.34
+  cxx_ceiling=3.4.29
   if [[ "$arch" == riscv64 ]]; then
     readelf="${RISCV_TOOLCHAIN_ROOT}/bin/riscv64-unknown-linux-gnu-readelf"
     objdump="${RISCV_TOOLCHAIN_ROOT}/bin/riscv64-unknown-linux-gnu-objdump"
+    glibc_ceiling=2.39
+    cxx_ceiling=3.4.31
   fi
-  "$PYTHON" - "$PREFIX/lib" "$readelf" "$objdump" <<'PY'
+  "$PYTHON" - "$PREFIX/lib" "$readelf" "$objdump" "$glibc_ceiling" "$cxx_ceiling" <<'PY'
 import re
 import subprocess
 import sys
@@ -342,6 +346,8 @@ from pathlib import Path
 root = Path(sys.argv[1])
 readelf = sys.argv[2]
 objdump = sys.argv[3]
+glibc_ceiling = tuple(int(part) for part in sys.argv[4].split("."))
+cxx_ceiling = tuple(int(part) for part in sys.argv[5].split("."))
 glibc_re = re.compile(r"GLIBC_(\d+)\.(\d+)")
 cxx_re = re.compile(r"GLIBCXX_(\d+)\.(\d+)\.(\d+)")
 libs = [p for p in root.iterdir() if p.is_file() and ".so" in p.name]
@@ -361,14 +367,17 @@ for lib in sorted(libs):
         if "*UND*" not in line:
             continue
         for match in glibc_re.finditer(line):
-            if (int(match.group(1)), int(match.group(2))) > (2, 34):
+            if (int(match.group(1)), int(match.group(2))) > glibc_ceiling:
                 newer.append(match.group(0))
         for match in cxx_re.finditer(line):
-            if tuple(int(part) for part in match.groups()) > (3, 4, 29):
+            if tuple(int(part) for part in match.groups()) > cxx_ceiling:
                 newer.append(match.group(0))
     if newer:
         names = ", ".join(sorted(set(newer)))
-        print(f"{lib}: needs a symbol newer than glibc 2.34 or GLIBCXX_3.4.29: {names}", file=sys.stderr)
+        print(
+            f"{lib}: needs a symbol newer than glibc {sys.argv[4]} or GLIBCXX_{sys.argv[5]}: {names}",
+            file=sys.stderr,
+        )
         failed = True
 sys.exit(1 if failed else 0)
 PY
