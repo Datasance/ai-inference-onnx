@@ -58,7 +58,7 @@ jobs:
               "migraphx",
           ]
           platforms = {
-              "cpu": ["amd64", "arm64", "arm", "riscv64"],
+              "cpu": ["amd64", "arm64", "riscv64"],
               "cuda12": ["amd64", "arm64"],
               "cuda13": ["amd64", "arm64"],
               "tensorrt12": ["amd64"],
@@ -70,7 +70,6 @@ jobs:
           docker_platform = {
               "amd64": "linux/amd64",
               "arm64": "linux/arm64",
-              "arm": "linux/arm/v7",
               "riscv64": "linux/riscv64",
           }
 

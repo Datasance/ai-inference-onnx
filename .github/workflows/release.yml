@@ -38,7 +38,6 @@ jobs:
               "cpu": [
                   ("amd64", "linux/amd64", "final-ubi"),
                   ("arm64", "linux/arm64", "final-ubi"),
-                  ("arm", "linux/arm/v7", "final-distroless"),
                   ("riscv64", "linux/riscv64", "final-distroless"),
               ],
               "cuda12": [
@@ -78,8 +77,8 @@ jobs:
               sys.exit("release version is not an image tag")
 
           def runner_for(variant, arch):
-              # armv7 and riscv64 have no native runner. They are built on amd64.
-              if arch in ("arm", "riscv64"):
+              # riscv64 has no native runner. It is built on amd64.
+              if arch == "riscv64":
                   return "ubuntu-24.04"
               if arch == "arm64":
                   native = "ubuntu-24.04-arm"

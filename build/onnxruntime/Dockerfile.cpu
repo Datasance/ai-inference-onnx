@@ -1,6 +1,6 @@
 # CPU ONNX Runtime 1.31.0.
 # amd64 and arm64 compile on UBI 9 with GCC 14.
-# arm and riscv64 cross-compile on the build machine with Debian compilers.
+# riscv64 cross-compiles on the build machine with a pinned riscv64-unknown-linux-gnu toolchain.
 # The last stage is a scratch image with the library, headers, licenses, version, and commit.
 
 FROM registry.access.redhat.com/ubi9/ubi:9.8@sha256:16e9e43d99e181463513cc84a514859b1abb9460f1c4d9e208da4b4e51cd5cc3 AS build-ubi
@@ -52,10 +52,6 @@ RUN apt-get update \
          git \
          make \
          build-essential \
-         gcc-arm-linux-gnueabihf \
-         g++-arm-linux-gnueabihf \
-         gcc-riscv64-linux-gnu \
-         g++-riscv64-linux-gnu \
          binutils \
          patch \
     && case "$BUILDARCH" in \
@@ -68,12 +64,17 @@ RUN apt-get update \
     && echo "${cmake_sum}  /tmp/cmake.tgz" | sha256sum -c - \
     && tar -C /usr/local --strip-components=1 -xzf /tmp/cmake.tgz \
     && rm -f /tmp/cmake.tgz \
+    && curl -fsSL -o /tmp/riscv-toolchain.tgz \
+         "https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2022.01.17/riscv64-glibc-ubuntu-20.04-nightly-2022.01.17-nightly.tar.gz" \
+    && echo "c11255d1e9e0fa7c5c2399a67d7884ea5fa85beede5cc79bf594469cb42743fc  /tmp/riscv-toolchain.tgz" | sha256sum -c - \
+    && mkdir -p /opt/riscv-toolchain \
+    && tar -C /opt/riscv-toolchain --strip-components=1 -xzf /tmp/riscv-toolchain.tgz \
+    && rm -f /tmp/riscv-toolchain.tgz \
+    && test -x /opt/riscv-toolchain/bin/riscv64-unknown-linux-gnu-gcc \
+    && test -d /opt/riscv-toolchain/sysroot \
     && rm -rf /var/lib/apt/lists/*
 
 COPY scripts/build-onnxruntime.sh /usr/local/bin/build-onnxruntime.sh
-
-FROM --platform=$BUILDPLATFORM build-cross AS build-arm
-RUN build-onnxruntime.sh cpu arm
 
 FROM --platform=$BUILDPLATFORM build-cross AS build-riscv64
 RUN build-onnxruntime.sh cpu riscv64

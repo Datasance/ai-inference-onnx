@@ -31,6 +31,7 @@ CUDNN_HOME=/usr
 QNN_HOME=/opt/qnn-${QNN_VERSION}
 OPENVINO_DIR=/opt/intel/openvino_${OPENVINO_VERSION}/runtime/cmake
 MIGRAPHX_HOME=/opt/rocm
+# The CPU image installs the pinned riscv64-unknown-linux-gnu toolchain here.
 RISCV_TOOLCHAIN_ROOT=/opt/riscv-toolchain
 
 PREFIX="${ORT_PREFIX:-/opt/onnxruntime}"
@@ -63,7 +64,6 @@ host_arch() {
   case "$(uname -m)" in
     x86_64 | amd64) echo amd64 ;;
     aarch64 | arm64) echo arm64 ;;
-    armv7l | armhf | armv6l) echo arm ;;
     riscv64) echo riscv64 ;;
     *) echo unknown ;;
   esac
@@ -71,7 +71,7 @@ host_arch() {
 
 matrix_ok() {
   case "$1:$2" in
-    cpu:amd64 | cpu:arm64 | cpu:arm | cpu:riscv64) return 0 ;;
+    cpu:amd64 | cpu:arm64 | cpu:riscv64) return 0 ;;
     cuda12:amd64 | cuda12:arm64) return 0 ;;
     cuda13:amd64 | cuda13:arm64) return 0 ;;
     tensorrt12:amd64) return 0 ;;
@@ -116,13 +116,11 @@ tensorrt_home() {
 # so the toolchain file is an absolute path.
 set_flags() {
   local variant="$1" arch="$2" src_dir="${3:-}"
-  local arm_toolchain riscv_toolchain cuda cudnn
+  local riscv_toolchain cuda cudnn
   FLAGS=()
   if [[ -n "$src_dir" ]]; then
-    arm_toolchain="${src_dir}/cmake/linux_arm32_crosscompile_toolchain.cmake"
     riscv_toolchain="${src_dir}/cmake/riscv64.toolchain.cmake"
   else
-    arm_toolchain="cmake/linux_arm32_crosscompile_toolchain.cmake"
     riscv_toolchain="cmake/riscv64.toolchain.cmake"
   fi
 
@@ -141,14 +139,11 @@ set_flags() {
   done < <(parallel_args)
 
   case "$arch" in
-    amd64 | arm | riscv64) FLAGS+=(--no_kleidiai) ;;
+    amd64 | riscv64) FLAGS+=(--no_kleidiai) ;;
     arm64) ;;
   esac
 
   case "$arch" in
-    arm)
-      FLAGS+=(--cmake_extra_defines "CMAKE_TOOLCHAIN_FILE=${arm_toolchain}" CMAKE_CROSSCOMPILING=ON CMAKE_SYSTEM_PROCESSOR=arm)
-      ;;
     riscv64)
       FLAGS+=(
         --rv64
@@ -228,34 +223,14 @@ enable_compiler() {
 }
 
 prepare_cross_toolchain() {
-  local arch="$1" tool
-  case "$arch" in
-    arm)
-      for tool in gcc g++ ar as ld nm objcopy objdump ranlib strip; do
-        if [[ -x "/usr/bin/arm-linux-gnueabihf-${tool}" ]]; then
-          ln -sfn "/usr/bin/arm-linux-gnueabihf-${tool}" "/usr/local/bin/arm-none-linux-gnueabihf-${tool}"
-        fi
-      done
-      if [[ ! -x /usr/local/bin/arm-none-linux-gnueabihf-gcc ]]; then
-        echo "arm cross compiler is not installed" >&2
-        exit 1
-      fi
-      ;;
-    riscv64)
-      mkdir -p "${RISCV_TOOLCHAIN_ROOT}/bin" "${RISCV_TOOLCHAIN_ROOT}/sysroot/usr"
-      ln -sfn /usr/riscv64-linux-gnu/include "${RISCV_TOOLCHAIN_ROOT}/sysroot/usr/include"
-      ln -sfn /usr/riscv64-linux-gnu/lib "${RISCV_TOOLCHAIN_ROOT}/sysroot/usr/lib"
-      for tool in gcc g++ ar as ld nm objcopy objdump ranlib strip; do
-        if [[ -x "/usr/bin/riscv64-linux-gnu-${tool}" ]]; then
-          ln -sfn "/usr/bin/riscv64-linux-gnu-${tool}" "${RISCV_TOOLCHAIN_ROOT}/bin/riscv64-unknown-linux-gnu-${tool}"
-        fi
-      done
-      if [[ ! -x "${RISCV_TOOLCHAIN_ROOT}/bin/riscv64-unknown-linux-gnu-gcc" ]]; then
-        echo "riscv64 cross compiler is not installed" >&2
-        exit 1
-      fi
-      ;;
-  esac
+  local arch="$1"
+  if [[ "$arch" != riscv64 ]]; then
+    return 0
+  fi
+  if [[ ! -x "${RISCV_TOOLCHAIN_ROOT}/bin/riscv64-unknown-linux-gnu-gcc" || ! -d "${RISCV_TOOLCHAIN_ROOT}/sysroot" ]]; then
+    echo "riscv64 toolchain is not installed at ${RISCV_TOOLCHAIN_ROOT}" >&2
+    exit 1
+  fi
 }
 
 fetch_source() {
@@ -351,13 +326,22 @@ EOF
 }
 
 check_abi() {
-  "$PYTHON" - "$PREFIX/lib" <<'PY'
+  local arch="$1" readelf objdump
+  readelf=readelf
+  objdump=objdump
+  if [[ "$arch" == riscv64 ]]; then
+    readelf="${RISCV_TOOLCHAIN_ROOT}/bin/riscv64-unknown-linux-gnu-readelf"
+    objdump="${RISCV_TOOLCHAIN_ROOT}/bin/riscv64-unknown-linux-gnu-objdump"
+  fi
+  "$PYTHON" - "$PREFIX/lib" "$readelf" "$objdump" <<'PY'
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
+readelf = sys.argv[2]
+objdump = sys.argv[3]
 glibc_re = re.compile(r"GLIBC_(\d+)\.(\d+)")
 cxx_re = re.compile(r"GLIBCXX_(\d+)\.(\d+)\.(\d+)")
 libs = [p for p in root.iterdir() if p.is_file() and ".so" in p.name]
@@ -366,12 +350,12 @@ if not libs:
     sys.exit(1)
 failed = False
 for lib in sorted(libs):
-    dyn = subprocess.check_output(["readelf", "-d", str(lib)], text=True, errors="replace")
+    dyn = subprocess.check_output([readelf, "-d", str(lib)], text=True, errors="replace")
     for line in dyn.splitlines():
         if ("RPATH" in line or "RUNPATH" in line) and "/opt/rh/" in line:
             print(f"{lib}: runtime path points at the compiler toolset: {line.strip()}", file=sys.stderr)
             failed = True
-    out = subprocess.check_output(["objdump", "-T", str(lib)], text=True, errors="replace")
+    out = subprocess.check_output([objdump, "-T", str(lib)], text=True, errors="replace")
     newer = []
     for line in out.splitlines():
         if "*UND*" not in line:
@@ -427,6 +411,6 @@ export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-2}"
 "$PYTHON" "${SRC}/tools/ci_build/build.py" --build_dir "$BUILD_DIR" "${FLAGS[@]}"
 install_prefix
 check_version "$arch"
-if [[ "$arch" == amd64 || "$arch" == arm64 ]]; then
-  check_abi
+if [[ "$arch" == amd64 || "$arch" == arm64 || "$arch" == riscv64 ]]; then
+  check_abi "$arch"
 fi

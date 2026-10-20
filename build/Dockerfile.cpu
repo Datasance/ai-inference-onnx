@@ -1,6 +1,6 @@
 # CPU engine image.
 # The runtime library comes from the onnxruntime build context.
-# amd64 and arm64 land on UBI 9.8 Micro. arm and riscv64 land on distroless.
+# amd64 and arm64 land on UBI 9.8 Micro. riscv64 lands on distroless.
 # The binary loads the library at run time and does not link it.
 
 FROM scratch AS onnxruntime
@@ -49,8 +49,6 @@ FROM --platform=$BUILDPLATFORM golang:1.26.9-trixie@sha256:f06b7122f888680048afb
 ARG TARGETARCH
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-         gcc-arm-linux-gnueabihf \
-         g++-arm-linux-gnueabihf \
          gcc-riscv64-linux-gnu \
          g++-riscv64-linux-gnu \
     && rm -rf /var/lib/apt/lists/*
@@ -61,15 +59,11 @@ RUN go mod download
 COPY . .
 RUN set -eu; \
     case "$TARGETARCH" in \
-      arm) \
-        export CC=arm-linux-gnueabihf-gcc CXX=arm-linux-gnueabihf-g++ GOARCH=arm GOARM=7; \
-        readelf=arm-linux-gnueabihf-readelf; \
-        ;; \
       riscv64) \
         export CC=riscv64-linux-gnu-gcc CXX=riscv64-linux-gnu-g++ GOARCH=riscv64; \
         readelf=riscv64-linux-gnu-readelf; \
         ;; \
-      *) echo "cross build is for arm and riscv64, not ${TARGETARCH}" >&2; exit 1 ;; \
+      *) echo "cross build is for riscv64, not ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     mkdir -p /out; \
     CGO_ENABLED=1 GOOS=linux go build -trimpath -buildvcs=false -o /out/inference ./cmd/inference; \
@@ -178,15 +172,11 @@ COPY --from=onnxruntime /licenses/ /staging/licenses/
 
 RUN set -eu; \
     case "$TARGETARCH" in \
-      arm) \
-        objdump=arm-linux-gnueabihf-objdump; \
-        readelf=arm-linux-gnueabihf-readelf; \
-        ;; \
       riscv64) \
         objdump=riscv64-linux-gnu-objdump; \
         readelf=riscv64-linux-gnu-readelf; \
         ;; \
-      *) echo "cross build is for arm and riscv64, not ${TARGETARCH}" >&2; exit 1 ;; \
+      *) echo "cross build is for riscv64, not ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     mkdir -p /staging/etc /staging/usr/local/bin /staging/var/cache/inference /staging/home/inference; \
     grep -q '^inference:' /tmp/distroless/group || printf 'inference:x:10001:\n' >> /tmp/distroless/group; \
