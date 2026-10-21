@@ -19,8 +19,8 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         tar \
         gzip \
     && case "$TARGETARCH" in \
-         amd64) go_sum=42d158b4d8f7b61ac0a830567c940a86098fb7aac52e467a5ebec03ef5cc2f8d ;; \
-         arm64) go_sum=4a97373d49fcacdcf3694fea368a500b00ee3f963974f3e7514132717632f052 ;; \
+         amd64) go_sum=ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5 ;; \
+         arm64) go_sum=3f4227ce7b206a513e794f1393adb473a07b46e94d18bd15d1c684bbb7319797 ;; \
          *) echo "no Go archive for ${TARGETARCH}" >&2; exit 1 ;; \
        esac \
     && curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go1.26.10.linux-${TARGETARCH}.tar.gz" \
@@ -59,8 +59,8 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         tar \
         gzip \
     && case "$TARGETARCH" in \
-         amd64) go_sum=42d158b4d8f7b61ac0a830567c940a86098fb7aac52e467a5ebec03ef5cc2f8d ;; \
-         arm64) go_sum=4a97373d49fcacdcf3694fea368a500b00ee3f963974f3e7514132717632f052 ;; \
+         amd64) go_sum=ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5 ;; \
+         arm64) go_sum=3f4227ce7b206a513e794f1393adb473a07b46e94d18bd15d1c684bbb7319797 ;; \
          *) echo "no Go archive for ${TARGETARCH}" >&2; exit 1 ;; \
        esac \
     && curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go1.26.10.linux-${TARGETARCH}.tar.gz" \
