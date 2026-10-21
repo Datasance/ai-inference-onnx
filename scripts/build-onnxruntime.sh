@@ -317,7 +317,9 @@ EOF
     fi
     rm -f /tmp/ort-version /tmp/ort-version.c
   else
-    if ! strings "$so" | grep -qx "$ORT_VERSION"; then
+    # The compiler stores the version literal as the tail of a longer string.
+    local version_re="${ORT_VERSION//./\\.}"
+    if ! strings "$so" | grep -qE "(^|[^0-9])${version_re}$"; then
       echo "runtime library does not contain version ${ORT_VERSION}" >&2
       exit 1
     fi
