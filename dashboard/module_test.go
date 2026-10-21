@@ -32,7 +32,9 @@ func TestModulePath(t *testing.T) {
 	}
 }
 
-// TestDashboardTree fails when dashboard code serves HTTP, imports ONNX Runtime, or imports the engine module.
+// TestDashboardTree fails when dashboard code outside the listener serves HTTP,
+// or when any file imports ONNX Runtime or the engine module.
+// The listener command may serve HTTP.
 func TestDashboardTree(t *testing.T) {
 	root := moduleRoot(t)
 	var problems []string
@@ -152,6 +154,46 @@ func f() { _, _ = http.Get("http://127.0.0.1") }
 	}
 }
 
+// TestDashboardCommandMayListen allows the listener command to serve HTTP.
+// An ONNX Runtime import or an engine import in that command is still rejected.
+func TestDashboardCommandMayListen(t *testing.T) {
+	listen := `package main
+import "net/http"
+func main() { _ = http.ListenAndServe(":8080", nil) }
+`
+	problems, err := inspect("cmd/dashboard/main.go", []byte(listen))
+	if err != nil {
+		t.Fatalf("inspect: %v", err)
+	}
+	if len(problems) != 0 {
+		t.Fatalf("listener: %s", strings.Join(problems, "; "))
+	}
+
+	runtimeImport := `package main
+import "github.com/yalue/onnxruntime_go"
+func main() {}
+`
+	problems, err = inspect("cmd/dashboard/main.go", []byte(runtimeImport))
+	if err != nil {
+		t.Fatalf("inspect: %v", err)
+	}
+	if len(problems) == 0 || !strings.Contains(strings.Join(problems, " "), "ONNX Runtime") {
+		t.Fatalf("runtime import: %s", strings.Join(problems, "; "))
+	}
+
+	engineImport := `package main
+import "github.com/eclipse-iofog/ai-inference-onnx/internal/config"
+func main() {}
+`
+	problems, err = inspect("/tmp/dashboard/cmd/dashboard/runtime.go", []byte(engineImport))
+	if err != nil {
+		t.Fatalf("inspect: %v", err)
+	}
+	if len(problems) == 0 || !strings.Contains(strings.Join(problems, " "), "engine module") {
+		t.Fatalf("engine import: %s", strings.Join(problems, "; "))
+	}
+}
+
 func moduleRoot(t *testing.T) string {
 	t.Helper()
 	_, filename, _, ok := runtime.Caller(0)
@@ -208,10 +250,17 @@ func problemsIn(filename string, file *ast.File) []string {
 			problems = append(problems, fmt.Sprintf("%s imports the engine module %s", filename, imported))
 		}
 	}
-	if servesHTTP(file) {
+	if servesHTTP(file) && !dashboardCommand(filename) {
 		problems = append(problems, filename+" starts an HTTP server")
 	}
 	return problems
+}
+
+// dashboardCommand reports whether filename is the listener command.
+// That command is the process that serves the pages.
+func dashboardCommand(filename string) bool {
+	clean := filepath.ToSlash(filename)
+	return strings.Contains("/"+clean, "/cmd/dashboard/")
 }
 
 func onnxRuntimeImport(path string) bool {
