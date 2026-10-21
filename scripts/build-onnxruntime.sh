@@ -318,8 +318,10 @@ EOF
     rm -f /tmp/ort-version /tmp/ort-version.c
   else
     # The compiler stores the version literal as the tail of a longer string.
+    # Read every line. With pipefail, grep -q stops early and strings
+    # exits on SIGPIPE, which looks like a missing version.
     local version_re="${ORT_VERSION//./\\.}"
-    if ! strings "$so" | grep -qE "(^|[^0-9])${version_re}$"; then
+    if ! strings -a "$so" | grep -E "(^|[^0-9])${version_re}$" >/dev/null; then
       echo "runtime library does not contain version ${ORT_VERSION}" >&2
       exit 1
     fi
