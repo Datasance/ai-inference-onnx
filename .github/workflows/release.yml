@@ -374,7 +374,7 @@ jobs:
             exit 1
           fi
           rm -rf artifacts
-          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir artifacts
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'engine-digest-*' --dir artifacts
           declare -A digests=()
           for dir in artifacts/engine-digest-*; do
             [ -d "$dir" ] || continue

@@ -322,7 +322,7 @@ jobs:
             exit 0
           fi
           rm -rf artifacts
-          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir artifacts
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'runtime-digest-*' --dir artifacts
           declare -A digests=()
           for dir in artifacts/runtime-digest-*; do
             [ -d "$dir" ] || continue
