@@ -28,7 +28,7 @@ Makefile                       local and CI quality gate
 
 ## Tests
 
-`make test` is the race tests that do not load a session, in both modules: `CGO_ENABLED=0 go test -race -count=1 ./...` in the engine module, then the same command in `dashboard/`.
+`make test` covers both modules without loading a session. The engine module runs `CGO_ENABLED=0 go test -count=1 ./...`, then `CGO_ENABLED=1 go test -race -count=1` on the packages with no cgo files. The dashboard module runs `CGO_ENABLED=1 go test -race -count=1 ./...`.
 
 `make quality` runs lint, vet, security-code, vulncheck, and `make test`.
 

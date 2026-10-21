@@ -66,9 +66,22 @@ vulncheck: ## Scan both modules, then verify module checksums
 	go mod verify
 	cd dashboard && go mod verify
 
-test: ## Race-detector tests in the engine module, then the dashboard module
-	CGO_ENABLED=0 go test -race -count=1 ./...
-	cd dashboard && CGO_ENABLED=0 go test -race -count=1 ./...
+# The race detector on Linux needs cgo. These packages have no cgo files,
+# so that run does not link ONNX Runtime.
+ENGINE_RACE_PKGS := \
+	./api/... \
+	./internal/auth/... \
+	./internal/batch/... \
+	./internal/config/... \
+	./internal/discover/... \
+	./internal/grpcapi/... \
+	./internal/httpapi/... \
+	./internal/metrics/...
+
+test: ## Tests that do not load a session, in both modules
+	CGO_ENABLED=0 go test -count=1 ./...
+	CGO_ENABLED=1 go test -race -count=1 $(ENGINE_RACE_PKGS)
+	cd dashboard && CGO_ENABLED=1 go test -race -count=1 ./...
 
 quality: lint vet security-code vulncheck test ## Lint, vet, gosec, vulnerability scan, and test
 
