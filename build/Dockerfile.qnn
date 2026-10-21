@@ -17,7 +17,7 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         tar \
         gzip \
     && go_sum=4a97373d49fcacdcf3694fea368a500b00ee3e963974f3e7514132717632f052 \
-    && curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go1.26.9.linux-arm64.tar.gz" \
+    && curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go1.26.10.linux-arm64.tar.gz" \
     && echo "${go_sum}  /tmp/go.tgz" | sha256sum -c - \
     && rm -rf /usr/local/go \
     && tar -C /usr/local -xzf /tmp/go.tgz \

@@ -21,7 +21,7 @@ RUN dnf install -y --setopt=install_weak_deps=False \
          arm64) go_sum=4a97373d49fcacdcf3694fea368a500b00ee3f963974f3e7514132717632f052 ;; \
          *) echo "no Go archive for ${TARGETARCH}" >&2; exit 1 ;; \
        esac \
-    && curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go1.26.9.linux-${TARGETARCH}.tar.gz" \
+    && curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go1.26.10.linux-${TARGETARCH}.tar.gz" \
     && echo "${go_sum}  /tmp/go.tgz" | sha256sum -c - \
     && rm -rf /usr/local/go \
     && tar -C /usr/local -xzf /tmp/go.tgz \

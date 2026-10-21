@@ -8,7 +8,7 @@ on:
 permissions: read-all
 
 env:
-  GO_VERSION: "1.26.9"
+  GO_VERSION: "1.26.10"
 
 jobs:
   select:
@@ -374,7 +374,7 @@ jobs:
             exit 1
           fi
           rm -rf artifacts
-          gh run download "$GITHUB_RUN_ID" --dir artifacts
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir artifacts
           declare -A digests=()
           for dir in artifacts/engine-digest-*; do
             [ -d "$dir" ] || continue
