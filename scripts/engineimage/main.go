@@ -39,7 +39,7 @@ func run() error {
 	if err := inspectImage(image); err != nil {
 		return err
 	}
-	if err := shellEntrypointFails(image); err != nil {
+	if err := shellEntrypointRuns(image); err != nil {
 		return err
 	}
 

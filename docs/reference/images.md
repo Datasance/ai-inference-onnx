@@ -52,7 +52,7 @@ OpenVINO runs on the CPU device. TensorRT keeps its engine cache and its timing 
 
 ## Non-root
 
-The process runs as `10001:10001`. It needs no capability, and it listens above 1024. Run it with `--read-only --tmpfs /tmp`. The model bind is read-only. The writable paths are `/var/cache/inference` and `/home/inference`. The image has no shell.
+The process runs as `10001:10001`. It needs no capability, and it listens above 1024. Run it with `--read-only --tmpfs /tmp`. The model bind is read-only. The writable paths are `/var/cache/inference` and `/home/inference`. A UBI image includes a shell, so an exec session can start. The riscv64 image does not.
 
 ## Devices and groups
 

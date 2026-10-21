@@ -404,8 +404,6 @@ chown root:root /staging/usr/local/bin/inference
 chown -R root:root /staging/opt/onnxruntime/lib /staging/usr/lib64 /staging/licenses
 chown -R 10001:10001 /staging/var/cache/inference /staging/home/inference
 chmod 0750 /staging/var/cache/inference /staging/var/cache/inference/cuda /staging/home/inference
-install -m 0644 /dev/null /staging/usr/bin/bash
-install -m 0644 /dev/null /staging/usr/bin/sh
 check_ldd() {
   local bin="$1" out line lib path base
   out="$(ldd "$bin" 2>&1)" || { printf '%s\n' "$out" >&2; echo "$bin: ldd failed" >&2; return 1; }

@@ -92,7 +92,9 @@ func (m Model) Selected(version string) (Version, bool) {
 }
 
 // Resolve lists each child directory of a models root.
-// A regular file in the root is ignored. The knowledge root is not an argument and is not read.
+// A symlink to a directory is a model, and the link name is the model name.
+// A name that starts with ".." is not a model. A regular file in the root is ignored.
+// The knowledge root is not an argument and is not read.
 // Each directory is either selected ONNX files or unavailable with a reason.
 func Resolve(root string) ([]Model, error) {
 	entries, err := os.ReadDir(root)
@@ -101,10 +103,15 @@ func Resolve(root string) ([]Model, error) {
 	}
 	var models []Model
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		name := entry.Name()
+		if strings.HasPrefix(name, "..") {
 			continue
 		}
-		models = append(models, resolveChild(root, entry.Name()))
+		info, err := os.Stat(filepath.Join(root, name))
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		models = append(models, resolveChild(root, name))
 	}
 	slices.SortFunc(models, func(a, b Model) int {
 		return strings.Compare(a.Name, b.Name)

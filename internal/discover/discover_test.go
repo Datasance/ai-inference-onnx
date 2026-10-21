@@ -515,6 +515,33 @@ func TestRootEntries(t *testing.T) {
 		requireVersion(t, got[1].Versions[0], "1", beta, false)
 	})
 
+	t.Run("symlink is the model", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		versionName := "..2026_10_21_22_35_44.597280736"
+		touch(t, filepath.Join(root, versionName, "wafer-defect", "model.onnx"))
+		model := filepath.Join(root, "wafer-defect", "model.onnx")
+		if err := os.Symlink(versionName, filepath.Join(root, "..data")); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join("..data", "wafer-defect"), filepath.Join(root, "wafer-defect")); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(versionName, "missing"), filepath.Join(root, "gone")); err != nil {
+			t.Fatal(err)
+		}
+
+		got := mustResolve(t, root)
+		if len(got) != 1 {
+			t.Fatalf("models %d", len(got))
+		}
+		requireResolved(t, got[0], 1)
+		if got[0].Name != "wafer-defect" {
+			t.Fatalf("name %q", got[0].Name)
+		}
+		requireVersion(t, got[0].Versions[0], "1", model, false)
+	})
+
 	t.Run("empty root", func(t *testing.T) {
 		t.Parallel()
 		got := mustResolve(t, t.TempDir())

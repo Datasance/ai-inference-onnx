@@ -162,8 +162,6 @@ chown root:root /staging/usr/local/bin/inference
 chown -R root:root /staging/opt/onnxruntime/lib /staging/usr/lib64 /staging/licenses
 chown -R 10001:10001 /staging/var/cache/inference /staging/home/inference
 chmod 0750 /staging/var/cache/inference /staging/home/inference
-install -m 0644 /dev/null /staging/usr/bin/bash
-install -m 0644 /dev/null /staging/usr/bin/sh
 test -e /staging/usr/lib64/libopenvino.so
 test -e /staging/usr/lib64/libopenvino_intel_cpu_plugin.so
 check_ldd() {

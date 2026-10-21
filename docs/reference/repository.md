@@ -1,6 +1,6 @@
 # Model repository
 
-The engine loads every child directory of the models root. The directory name is the model name. A regular file in the models root is ignored. The knowledge root is a separate directory, and the engine does not scan it for ONNX files.
+The engine loads every child directory of the models root. The directory name is the model name. A symlink to a directory is a model, and the link name is the model name. A directory whose name starts with `..` is not a model. A regular file in the models root is ignored. The knowledge root is a separate directory, and the engine does not scan it for ONNX files.
 
 Names may contain dots. A name that contains `*` or `>` is rejected, because those characters are wildcards on NATS.
 

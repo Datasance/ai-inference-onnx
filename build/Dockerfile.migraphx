@@ -247,8 +247,6 @@ chown root:root /staging/usr/local/bin/inference
 chown -R root:root /staging/opt/onnxruntime/lib /staging/opt/rocm /staging/usr/lib64 /staging/licenses
 chown -R 10001:10001 /staging/var/cache/inference /staging/home/inference
 chmod 0750 /staging/var/cache/inference /staging/home/inference
-install -m 0644 /dev/null /staging/usr/bin/bash
-install -m 0644 /dev/null /staging/usr/bin/sh
 find /staging/opt/rocm/lib -maxdepth 1 -name 'libmigraphx_c.so*' | grep -q .
 host_object() {
   header=$(readelf -h "$1" 2>/dev/null || true)

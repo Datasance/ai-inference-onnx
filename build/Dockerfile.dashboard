@@ -30,19 +30,16 @@ FROM user-staging AS runtime-staging
 COPY --from=build /out/dashboard /staging/usr/local/bin/dashboard
 COPY LICENSE /staging/licenses/LICENSE
 
-# UBI Micro ships a shell. The staged root replaces it so the image cannot be entered.
+# UBI Micro ships the shell. The staged root leaves it in place.
 RUN set -eu; \
     mkdir -p \
       /staging/etc/pki/ca-trust/extracted/pem \
-      /staging/etc/pki/tls/certs \
-      /staging/usr/bin; \
+      /staging/etc/pki/tls/certs; \
     cp -a /etc/passwd /etc/group /staging/etc/; \
     cp -a /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /staging/etc/pki/ca-trust/extracted/pem/; \
     ln -s /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /staging/etc/pki/tls/certs/ca-bundle.crt; \
     chmod 0755 /staging/usr/local/bin/dashboard; \
-    chown root:root /staging/usr/local/bin/dashboard /staging/licenses/LICENSE; \
-    install -m 0644 /dev/null /staging/usr/bin/bash; \
-    install -m 0644 /dev/null /staging/usr/bin/sh
+    chown root:root /staging/usr/local/bin/dashboard /staging/licenses/LICENSE
 
 FROM registry.access.redhat.com/ubi9/ubi-micro:9.8@sha256:5be877a2a280ae36eb9ab80ca4efb28bbf77c57abbba38137cdc37a03b8465e6 AS final
 

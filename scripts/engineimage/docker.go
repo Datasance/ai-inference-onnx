@@ -193,9 +193,8 @@ func inspectImage(image string) error {
 	return fmt.Errorf("image environment has no %s", want)
 }
 
-// shellEntrypointFails runs the image with /bin/sh as the entrypoint.
-// The final stage has no shell, so the container does not start.
-func shellEntrypointFails(image string) error {
+// shellEntrypointRuns starts /bin/sh in the image. A UBI image includes that shell.
+func shellEntrypointRuns(image string) error {
 	args := []string{"run", "--rm", "--name", "engine-image-test-shell"}
 	args = append(args, runFlags()...)
 	args = append(args, "--entrypoint", "/bin/sh", image, "-c", "exit 0")
@@ -206,8 +205,8 @@ func shellEntrypointFails(image string) error {
 	if strings.Contains(text, "Cannot connect to the Docker daemon") || strings.Contains(text, "error during connect") {
 		return fmt.Errorf("docker: %s", text)
 	}
-	if err == nil {
-		return fmt.Errorf("shell entrypoint started:\n%s", text)
+	if err != nil {
+		return fmt.Errorf("shell entrypoint failed:\n%s", text)
 	}
 	return nil
 }

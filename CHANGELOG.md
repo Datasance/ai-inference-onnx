@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.1.0-rc.2] - 2026-10-21
+
+### Fixed
+
+- A model directory that is a symlink is loaded. A directory whose name starts with `..` is not a model.
+
+### Changed
+
+- A UBI engine image includes a shell, so an exec session can start. The riscv64 image does not.
+
+## [dashboard/v0.1.0-rc.2] - 2026-10-21
+
+### Changed
+
+- The dashboard image includes a shell, so an exec session can start.
+
 ## [v0.1.0-rc.1] - 2026-10-21
 
 ### Added
