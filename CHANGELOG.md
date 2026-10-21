@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [v0.1.0] - 2026-10-21
+## [v0.1.0-rc.1] - 2026-10-21
 
 ### Added
 
@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The dashboard reads those metrics. It does not run inference.
 - Operator docs describe the repository, configuration, calls, metrics, images, and day-to-day tasks.
 
-## [dashboard/v0.1.0] - 2026-10-21
+## [dashboard/v0.1.0-rc.1] - 2026-10-21
 
 ### Added
 
