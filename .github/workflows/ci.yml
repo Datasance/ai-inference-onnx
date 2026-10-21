@@ -11,7 +11,6 @@ permissions: read-all
 
 env:
   GO_VERSION: '1.26.10'
-  GOSEC_VERSION: v2.29.0
 
 jobs:
   quality:
@@ -47,42 +46,16 @@ jobs:
           working-directory: ${{ matrix.working-directory }}
 
       - name: go vet
-        run: go vet ./...
-
-      - name: Install gosec
-        run: go install github.com/securego/gosec/v2/cmd/gosec@${{ env.GOSEC_VERSION }}
+        working-directory: ${{ github.workspace }}
+        run: make vet
 
       - name: gosec
-        run: gosec ./...
-
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
-
-      - name: govulncheck
-        run: govulncheck ./...
-
-      - name: Verify module integrity
-        run: go mod verify
+        working-directory: ${{ github.workspace }}
+        run: make security-code
 
       - name: Test
-        run: |
-          CGO_ENABLED=0 go test -count=1 ./...
-          go test -race -count=1 ./...
-        if: matrix.name == 'Dashboard'
-
-      - name: Test
-        run: |
-          CGO_ENABLED=0 go test -count=1 ./...
-          CGO_ENABLED=1 go test -race -count=1 \
-            ./api/openinference/v2/ \
-            ./internal/auth/ \
-            ./internal/batch/ \
-            ./internal/config/ \
-            ./internal/discover/ \
-            ./internal/grpcapi/ \
-            ./internal/httpapi/ \
-            ./internal/metrics/
-        if: matrix.name == 'Engine'
+        working-directory: ${{ github.workspace }}
+        run: make test
 
       - name: Fuzz and pin check
         if: matrix.name == 'Engine'
