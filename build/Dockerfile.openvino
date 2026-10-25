@@ -76,12 +76,14 @@ do
   fi
 done
 shopt -s nullglob
+# These patterns name files in the extracted library directory. Quoted, they
+# expand there. Unquoted, nullglob expands them in / and drops the versioned libraries.
 for name in \
-  libopenvino.so libopenvino.so.* \
-  libopenvino_c.so libopenvino_c.so.* \
-  libopenvino_onnx_frontend.so libopenvino_onnx_frontend.so.* \
-  libopenvino_ir_frontend.so.* \
-  libopenvino_intel_cpu_plugin.so
+  'libopenvino.so' 'libopenvino.so.*' \
+  'libopenvino_c.so' 'libopenvino_c.so.*' \
+  'libopenvino_onnx_frontend.so' 'libopenvino_onnx_frontend.so.*' \
+  'libopenvino_ir_frontend.so.*' \
+  'libopenvino_intel_cpu_plugin.so'
 do
   for f in "$lib"/$name; do
     cp -a "$f" /out/lib/

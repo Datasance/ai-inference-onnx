@@ -213,14 +213,11 @@ set -euo pipefail
 curl -fsSL -o /tmp/tensorrt.tar.gz "$TENSORRT_URL"
 echo "${TENSORRT_SHA256}  /tmp/tensorrt.tar.gz" | sha256sum -c -
 mkdir -p /tmp/tensorrt-src /out/lib /out/licenses
+# doc/ holds Acknowledgements.txt and README.txt. tar exits if a listed name is absent.
 tar -C /tmp/tensorrt-src -xzf /tmp/tensorrt.tar.gz \
   --wildcards \
   '*/lib/*.so' \
   '*/lib/*.so.*' \
-  '*/LICENSE' \
-  '*/LICENSE.txt' \
-  '*/License.txt' \
-  '*/license*' \
   '*/doc/Acknowledgements.txt' \
   '*/doc/README.txt'
 rm -f /tmp/tensorrt.tar.gz
@@ -285,14 +282,11 @@ set -euo pipefail
 curl -fsSL -o /tmp/tensorrt.tar.gz "$TENSORRT_URL"
 echo "${TENSORRT_SHA256}  /tmp/tensorrt.tar.gz" | sha256sum -c -
 mkdir -p /tmp/tensorrt-src /out/lib /out/licenses
+# doc/ holds Acknowledgements.txt and README.txt. tar exits if a listed name is absent.
 tar -C /tmp/tensorrt-src -xzf /tmp/tensorrt.tar.gz \
   --wildcards \
   '*/lib/*.so' \
   '*/lib/*.so.*' \
-  '*/LICENSE' \
-  '*/LICENSE.txt' \
-  '*/License.txt' \
-  '*/license*' \
   '*/doc/Acknowledgements.txt' \
   '*/doc/README.txt'
 rm -f /tmp/tensorrt.tar.gz
