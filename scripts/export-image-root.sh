@@ -81,9 +81,14 @@ cleanup() {
 trap cleanup EXIT
 image="$(platform_manifest "$image" "$platform")" || exit 1
 printf 'FROM %s\n' "$image" >"${tmp}/Dockerfile"
+# UBI keeps /root mode 0700, and that directory contains buildinfo. A local
+# unpack running as the runner cannot create that directory. A tar export is
+# one file; extracting it as the current user can.
+archive="${tmp}/image.tar"
 docker buildx build \
 	--platform "$platform" \
-	--output "type=local,dest=${dest}" \
+	--output "type=tar,dest=${archive}" \
 	--provenance=false \
 	--sbom=false \
 	"$tmp"
+tar --no-same-owner -C "$dest" -xf "$archive"

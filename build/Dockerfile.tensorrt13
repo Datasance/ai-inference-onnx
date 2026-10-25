@@ -87,6 +87,15 @@ RUN set -eu; \
 
 FROM engine-${TARGETARCH} AS engine
 
+# GCC 14 libstdc++ provides GLIBCXX_3.4.32. The arm64 TensorRT libraries need
+# GLIBCXX_3.4.30, which the UBI 9 libstdc++ does not provide.
+FROM engine AS cxx-libstd
+RUN set -eu; \
+    src=/opt/rh/gcc-toolset-14/root/usr/lib64; \
+    mkdir -p /out/libstd; \
+    cp -a "$src"/libstdc++.so.6 "$src"/libstdc++.so.6.* /out/libstd/; \
+    test -e /out/libstd/libstdc++.so.6
+
 FROM nvcr.io/nvidia/cuda:13.0.2-cudnn-runtime-ubi9@sha256:30cd1e776cc0d186b95d650b2b29f3ca2e11a2457b87b3be6d229b27f7b96d18 AS cuda-libs-amd64
 
 RUN bash <<'ENDSCRIPT'
@@ -354,6 +363,8 @@ RUN microdnf install -y --setopt=install_weak_deps=0 \
 
 FROM user-staging-ubi AS runtime-staging-ubi
 
+ARG TARGETARCH
+
 RUN microdnf install -y --setopt=install_weak_deps=0 binutils \
     && microdnf clean all
 
@@ -364,8 +375,9 @@ COPY --from=cuda-libs /out/lib/ /staging/usr/lib64/
 COPY --from=cuda-libs /out/licenses/ /staging/licenses/
 COPY --from=tensorrt /out/lib/ /staging/usr/lib64/
 COPY --from=tensorrt /out/licenses/ /staging/licenses/
+COPY --from=cxx-libstd /out/libstd/ /tmp/libstd/
 
-RUN bash <<'ENDSCRIPT'
+RUN TARGETARCH="$TARGETARCH" bash <<'ENDSCRIPT'
 set -euo pipefail
 mkdir -p \
   /staging/etc/pki/ca-trust/extracted/pem \
@@ -377,7 +389,15 @@ mkdir -p \
 cp -a /etc/passwd /etc/group /staging/etc/
 cp -a /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /staging/etc/pki/ca-trust/extracted/pem/
 ln -s /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /staging/etc/pki/tls/certs/ca-bundle.crt
-cp -a /usr/lib64/libstdc++.so.6 /usr/lib64/libstdc++.so.6.* /staging/usr/lib64/
+cxx_ceiling=3.4.29
+if [ "$TARGETARCH" = arm64 ]; then
+  # Replace the UBI libstdc++ with the GCC 14 library TensorRT 10.15 was built against.
+  cp -a /tmp/libstd/libstdc++.so.6 /tmp/libstd/libstdc++.so.6.* /staging/usr/lib64/
+  objdump -T /staging/usr/lib64/libstdc++.so.6 | grep -q 'GLIBCXX_3.4.32'
+  cxx_ceiling=3.4.32
+else
+  cp -a /usr/lib64/libstdc++.so.6 /usr/lib64/libstdc++.so.6.* /staging/usr/lib64/
+fi
 cp -a /usr/lib64/libz.so.1 /usr/lib64/libz.so.1.* /staging/usr/lib64/
 if [ -f /usr/share/licenses/zlib/LICENSE ]; then
   cp -a /usr/share/licenses/zlib/LICENSE /staging/licenses/zlib-LICENSE
@@ -441,12 +461,12 @@ check_abi() {
   for sym in $syms; do
     case "$sym" in
       GLIBC_*) ver="${sym#GLIBC_}"; ceiling=2.34 ;;
-      GLIBCXX_*) ver="${sym#GLIBCXX_}"; ceiling=3.4.29 ;;
+      GLIBCXX_*) ver="${sym#GLIBCXX_}"; ceiling="$cxx_ceiling" ;;
       *) continue ;;
     esac
     first="$(printf '%s\n%s\n' "$ceiling" "$ver" | sort -V | head -n 1)"
     if [ "$first" = "$ceiling" ] && [ "$ver" != "$ceiling" ]; then
-      echo "$bin: needs a symbol newer than glibc 2.34 or GLIBCXX_3.4.29: $sym" >&2
+      echo "$bin: needs a symbol newer than glibc 2.34 or GLIBCXX_${ceiling}: $sym" >&2
       return 1
     fi
   done

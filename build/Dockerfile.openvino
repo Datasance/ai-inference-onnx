@@ -123,8 +123,10 @@ RUN microdnf install -y --setopt=install_weak_deps=0 \
         shadow-utils \
         ca-certificates \
         libstdc++ \
+        zlib \
     && microdnf clean all \
     && test -e /usr/lib64/libstdc++.so.6 \
+    && test -e /usr/lib64/libz.so.1 \
     && test -f /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
     && groupadd --gid 10001 inference \
     && useradd --uid 10001 --gid 10001 --home-dir /home/inference --no-create-home --shell /sbin/nologin inference
@@ -153,6 +155,10 @@ cp -a /etc/passwd /etc/group /staging/etc/
 cp -a /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /staging/etc/pki/ca-trust/extracted/pem/
 ln -s /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /staging/etc/pki/tls/certs/ca-bundle.crt
 cp -a /usr/lib64/libstdc++.so.6 /usr/lib64/libstdc++.so.6.* /staging/usr/lib64/
+cp -a /usr/lib64/libz.so.1 /usr/lib64/libz.so.1.* /staging/usr/lib64/
+if [ -f /usr/share/licenses/zlib/LICENSE ]; then
+  cp -a /usr/share/licenses/zlib/LICENSE /staging/licenses/zlib-LICENSE
+fi
 chmod 0755 /staging/usr/local/bin/inference
 for lib in /staging/usr/lib64/* /staging/opt/onnxruntime/lib/*; do
   if [ -f "$lib" ] && [ ! -L "$lib" ]; then
